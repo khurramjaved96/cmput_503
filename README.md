@@ -1,2 +1,2 @@
 # cmput_503
-Playing with the duckiebot 
+Code used for doing exercises for CMPUT503
