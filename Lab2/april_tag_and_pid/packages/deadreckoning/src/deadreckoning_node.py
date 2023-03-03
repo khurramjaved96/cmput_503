@@ -17,6 +17,11 @@ from tf2_ros import TransformBroadcaster
 from tf import transformations as tr
 
 
+import rospy
+import tf
+from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
+
+
 class DeadReckoningNode(DTROS):
     """Performs deadreckoning.
     The node performs deadreckoning to estimate odometry
@@ -64,8 +69,8 @@ class DeadReckoningNode(DTROS):
         self.x = 0.50
         self.y = 0.50
         self.z = 0.0
-        self.yaw = 1.8
-        self.q = [0.0, 0.0, 0.0, 1.0]
+        self.yaw = 1.5707
+        self.q = [0.0, 0.0, 0.0, 0.0]
         self.tv = 0.0
         self.rv = 0.0
 
@@ -209,6 +214,8 @@ class DeadReckoningNode(DTROS):
         self.z = msg.z
         odom.header.stamp = rospy.Time.now()  # Ideally, should be encoder time
         odom.header.frame_id = self.origin_frame
+        self.yaw = msg.orientation
+        self.q = tr.quaternion_from_euler(0, 0, msg.orientation)
         odom.pose.pose = Pose(Point(msg.x, msg.y, msg.z), Quaternion(*self.q))
         odom.child_frame_id = self.target_frame
         odom.twist.twist = Twist(Vector3(self.tv, 0.0, 0.0), Vector3(0.0, 0.0, self.rv))
@@ -245,6 +252,15 @@ class DeadReckoningNode(DTROS):
             return theta + 2 * math.pi
         else:
             return theta
+
+
+
+
+apriltag_list = [200, 201, 94, 93, 153, 133, 58, 62, 169, 162]
+apriltag_name_list = ['200', '201', '94', '93',
+                      '153', '133', '58', '62', '169', '162']
+x_list = [0.17, 1.65, 1.65, 0.17, 1.75, 1.253, 0.574, 0.075, 0.574, 1.253]
+y_list = [0.17, 0.17, 2.84, 2.84, 1.252, 1.755, 1.259, 1.755, 1.755, 1.253]
 
 
 if __name__ == "__main__":
