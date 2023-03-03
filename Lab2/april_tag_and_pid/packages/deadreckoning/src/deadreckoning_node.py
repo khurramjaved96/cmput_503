@@ -5,6 +5,8 @@ import math
 import rospy
 import message_filters
 
+from custom_msgs.srv import ODO
+from custom_msgs.srv import ODOResponse
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, Twist, Pose, Point, Vector3, TransformStamped, Transform
 
@@ -59,10 +61,10 @@ class DeadReckoningNode(DTROS):
 
         # Current pose, forward velocity, and angular rate
         self.timestamp = None
-        self.x = 0.0
-        self.y = 0.0
+        self.x = 0.50
+        self.y = 0.50
         self.z = 0.0
-        self.yaw = 0.0
+        self.yaw = 1.8
         self.q = [0.0, 0.0, 0.0, 1.0]
         self.tv = 0.0
         self.rv = 0.0
@@ -79,6 +81,11 @@ class DeadReckoningNode(DTROS):
         self.sub_encoder_left = message_filters.Subscriber("~left_wheel", WheelEncoderStamped)
 
         self.sub_encoder_right = message_filters.Subscriber("~right_wheel", WheelEncoderStamped)
+
+
+        # Service for teleporting
+        self.srv_set_pattern_ = rospy.Service("~teleport", ODO, self.Teleport)
+
 
         # Setup the time synchronizer
         self.ts_encoders = message_filters.ApproximateTimeSynchronizer(
@@ -116,9 +123,9 @@ class DeadReckoningNode(DTROS):
         # Skip this message if the time synchronizer gave us an older message
         dtl = left_encoder.header.stamp - self.left_encoder_last.header.stamp
         dtr = right_encoder.header.stamp - self.right_encoder_last.header.stamp
-        if dtl.to_sec() < 0 or dtr.to_sec() < 0:
-            self.loginfo("Ignoring stale encoder message")
-            return
+        # if dtl.to_sec() < 0 or dtr.to_sec() < 0:
+        #     self.loginfo("Ignoring stale encoder message")
+        #     return
 
         left_dticks = left_encoder.data - self.left_encoder_last.data
         right_dticks = right_encoder.data - self.right_encoder_last.data
@@ -195,6 +202,19 @@ class DeadReckoningNode(DTROS):
         if need_print:
             self._print_time = time.time()
 
+    def Teleport(self, msg):
+        odom = Odometry()
+        self.x = msg.x
+        self.y = msg.y
+        self.z = msg.z
+        odom.header.stamp = rospy.Time.now()  # Ideally, should be encoder time
+        odom.header.frame_id = self.origin_frame
+        odom.pose.pose = Pose(Point(msg.x, msg.y, msg.z), Quaternion(*self.q))
+        odom.child_frame_id = self.target_frame
+        odom.twist.twist = Twist(Vector3(self.tv, 0.0, 0.0), Vector3(0.0, 0.0, self.rv))
+        self.pub.publish(odom)
+        return ODOResponse()
+
     def publish_odometry(self):
         odom = Odometry()
         odom.header.stamp = rospy.Time.now()  # Ideally, should be encoder time
@@ -205,15 +225,17 @@ class DeadReckoningNode(DTROS):
 
         self.pub.publish(odom)
 
-        self._tf_broadcaster.sendTransform(
-            TransformStamped(
-                header=odom.header,
-                child_frame_id=self.target_frame,
-                transform=Transform(
-                    translation=Vector3(self.x, self.y, self.z), rotation=Quaternion(*self.q)
-                ),
-            )
-        )
+        #Part 3.1
+        #https://docs.ros.org/en/foxy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Broadcaster-Py.html
+        t = TransformStamped()
+        t.header = odom.header
+        t.header.stamp = rospy.Time.now()
+        t.child_frame_id = "odometry"
+        t.header.frame_id = "world"
+        t.transform = Transform(
+                    translation=Vector3(self.x, self.y, self.z), rotation=Quaternion(*self.q))
+
+        self._tf_broadcaster.sendTransform(t)
 
     @staticmethod
     def angle_clamp(theta):
