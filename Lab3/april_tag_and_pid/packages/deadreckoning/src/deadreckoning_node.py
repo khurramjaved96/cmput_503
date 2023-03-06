@@ -111,6 +111,7 @@ class DeadReckoningNode(DTROS):
         self.loginfo("Initialized")
 
     def cb_ts_encoders(self, left_encoder, right_encoder):
+        print("Not happening")
         timestamp_now = rospy.get_time()
 
         # Use the average of the two encoder times as the timestamp
@@ -128,9 +129,9 @@ class DeadReckoningNode(DTROS):
         # Skip this message if the time synchronizer gave us an older message
         dtl = left_encoder.header.stamp - self.left_encoder_last.header.stamp
         dtr = right_encoder.header.stamp - self.right_encoder_last.header.stamp
-        # if dtl.to_sec() < 0 or dtr.to_sec() < 0:
-        #     self.loginfo("Ignoring stale encoder message")
-        #     return
+        if dtl.to_sec() < 0 or dtr.to_sec() < 0:
+            self.loginfo("Ignoring stale encoder message")
+            return
 
         left_dticks = left_encoder.data - self.left_encoder_last.data
         right_dticks = right_encoder.data - self.right_encoder_last.data
@@ -239,9 +240,11 @@ class DeadReckoningNode(DTROS):
         t.header.stamp = rospy.Time.now()
         t.child_frame_id = "odometry"
         t.header.frame_id = "world"
+        print("sending transform")
+
         t.transform = Transform(
                     translation=Vector3(self.x, self.y, self.z), rotation=Quaternion(*self.q))
-
+        print(t)
         self._tf_broadcaster.sendTransform(t)
 
     @staticmethod
@@ -254,18 +257,69 @@ class DeadReckoningNode(DTROS):
             return theta
 
 
-
-
+PI = 3.1415
 apriltag_list = [200, 201, 94, 93, 153, 133, 58, 62, 169, 162]
 apriltag_name_list = ['200', '201', '94', '93',
                       '153', '133', '58', '62', '169', '162']
 x_list = [0.17, 1.65, 1.65, 0.17, 1.75, 1.253, 0.574, 0.075, 0.574, 1.253]
 y_list = [0.17, 0.17, 2.84, 2.84, 1.252, 1.755, 1.259, 1.755, 1.755, 1.253]
+yaw = [PI/2 + PI/4, PI/2 + 3*PI/4, -PI/4, PI/2 - PI/4, 0, PI, 0, PI, PI/2, -PI/2 ]
+pitch = [1.57]
+
 
 
 if __name__ == "__main__":
     # create node
     node = DeadReckoningNode("deadreckoning_node")
+    broadcaster = StaticTransformBroadcaster()
+
+    i = 0
+    for i_april in apriltag_list:
+        t = TransformStamped()
+
+        t.header.stamp = rospy.Time.now()
+        t.header.frame_id = 'world'
+        t.child_frame_id = "at_" + str(apriltag_name_list[i]) +"_static"
+
+        t.transform.translation.x = float(x_list[i])
+        t.transform.translation.y = float(y_list[i])
+        t.transform.translation.z = float(0)
+
+        quat = tf.transformations.quaternion_from_euler(  # TODO: search more about it
+            float(-PI / 2), float(0), yaw[i])
+        t.transform.rotation.x = quat[0]
+        t.transform.rotation.y = quat[1]
+        t.transform.rotation.z = quat[2]
+        t.transform.rotation.w = quat[3]
+
+        broadcaster.sendTransform(t)
+        # self.log(f"sent info for apriltag {apriltag_name_list[i]}")
+        rospy.sleep(0.2)
+        i += 1
+
+
+    t = TransformStamped()
+
+    t.header.stamp = rospy.Time.now()
+    t.child_frame_id = 'csc22938/footprint'
+    t.header.frame_id = 'odometry'
+
+    t.transform.translation.x = float(0)
+    t.transform.translation.y = float(0)
+    t.transform.translation.z = float(0)
+
+    quat = tf.transformations.quaternion_from_euler(  # TODO: search more about it
+        float(0), float(0), 0)
+    t.transform.rotation.x = quat[0]
+    t.transform.rotation.y = quat[1]
+    t.transform.rotation.z = quat[2]
+    t.transform.rotation.w = quat[3]
+
+    broadcaster.sendTransform(t)
+
+
+
+
     rospy.spin()
     # ---
     rospy.signal_shutdown("done")
