@@ -3,6 +3,8 @@ Run the deadreckoning node using:
 
 > roslaunch deadreckoning deadreckoning_node.launch  veh:=csc22938
 
+The static markers are also added by deadreckoning_node.launch
+
 and run the files in april_tag_detection package to to get each of the deliverables as: 
 
 > rosrun april_tag_detection Deliverable_1.py
