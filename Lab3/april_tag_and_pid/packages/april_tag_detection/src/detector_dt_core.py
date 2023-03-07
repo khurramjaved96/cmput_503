@@ -19,6 +19,8 @@ from tf import transformations as tr
 from duckietown_msgs.msg import AprilTagDetectionArray, AprilTagDetection
 from sensor_msgs.msg import CameraInfo, CompressedImage
 from geometry_msgs.msg import Transform, Vector3, Quaternion
+from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
+import tf
 
 
 class AprilTagDetector(DTROS):
@@ -36,7 +38,8 @@ class AprilTagDetector(DTROS):
         self.decode_sharpening = rospy.get_param("~decode_sharpening", 0.25)
         self.tag_size = rospy.get_param("~tag_size", 0.065)
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
-        self.buffer = Buffer()
+        self.buffer = tf2_ros.Buffer()
+
         # dynamic parameter
         self.detection_freq = DTParam(
             "~detection_freq", default=-1, param_type=ParamType.INT, min_value=-1, max_value=30
@@ -63,11 +66,13 @@ class AprilTagDetector(DTROS):
         self._tasks = [None] * self.ndetectors
         # create TF broadcaster
         self._tf_bcaster = tf.TransformBroadcaster()
+        self._tf_bcaster2 = tf2_ros.TransformBroadcaster()
 
         self._renderer_busy = False
         # create a CV bridge object
         self._jpeg = TurboJPEG()
         # create subscribers
+
         self._img_sub = rospy.Subscriber(
             "/csc22938/camera_node/image/compressed", CompressedImage, self._img_cb, queue_size=1, buff_size="20MB"
         )
@@ -87,6 +92,7 @@ class AprilTagDetector(DTROS):
             dt_topic_type=TopicType.VISUALIZATION,
             dt_help="Camera image with tag publishs superimposed",
         )
+        # self.tf2_ros.TransformListener(self.buffer)
         self.listener = tf2_ros.TransformListener(self.buffer)
 
 
@@ -133,7 +139,7 @@ class AprilTagDetector(DTROS):
             tags = self._detectors[detector_id].detect(img, True, self._camera_parameters, self.tag_size)
         # pack detections into a message
         tags_msg = AprilTagDetectionArray()
-        tags_msg.header.stamp = msg.header.stamp
+        tags_msg.header.stamp = rospy.Time.now()
         tags_msg.header.frame_id = msg.header.frame_id
         z_min = 100000
         z_min_id = -1
@@ -169,37 +175,28 @@ class AprilTagDetector(DTROS):
                     translation=Vector3(x=p[0], y=p[1], z=p[2]),
                     rotation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3]),
                 )
-            # add detection to array
-            tags_msg.detections.append(detection)
-            # publish tf
 
-            # t = TransformStamped()
-            # t.header = msg.header
-            # t.header.stamp = msg.header.stamp
-            # t.child_frame_id = "tag/{:s}".format(str(tag.tag_id)),
-            # t.header.frame_id = "world"
-            # t.transform = Transform(
-            #         translation=Vector3(x=p[0], y=p[1], z=p[2]),
-            #         rotation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3]))
-            #
-            # self._tf_bcaster.sendTransform(t)
+            tags_msg.detections.append(detection)
 
             print( "Message stamp", msg.header.stamp)
 
             self._tf_bcaster.sendTransform(
                 p.tolist(),
                 q.tolist(),
-                msg.header.stamp,
+                rospy.Time.now()  ,
                 "tag/{:s}".format(str(tag.tag_id)),
                 'csc22938/camera_optical_frame',
             )
 
             try:
-                trans = self.lookup_transform( "odometry", "csc22938/footprint", rospy.Time(0), 1)
-                print("Transform successed")
-                print("Dying happily")
-                exit(0)
-            except:
+                trans = self.buffer.lookup_transform( "world", "tag/{:s}".format(str(tag.tag_id)), rospy.Time(0), rospy.Duration(1.0))
+                print(trans)
+                self._tf_bcaster2.sendTransform(trans)
+                # print(trans)
+                print("MANGED TO GET A TRANSFORM")
+                # exit(0)
+            except Exception as e:
+                print(e)
                 print("Transform failed")
             # print(trans)
         if detec is not None:
@@ -222,6 +219,10 @@ class AprilTagDetector(DTROS):
         if self._img_pub.anybody_listening() and not self._renderer_busy:
             self._renderer_busy = True
             Thread(target=self._render_detections, args=(msg, img, tags)).start()
+
+
+
+
 
     def _img_cb(self, msg):
         # make sure we have received camera info

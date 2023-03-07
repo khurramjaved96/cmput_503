@@ -70,7 +70,7 @@ class DeadReckoningNode(DTROS):
         self.y = 0.50
         self.z = 0.0
         self.yaw = 1.5707
-        self.q = [0.0, 0.0, 0.0, 0.0]
+        self.q = [0.0, 0.0, 0.0, 1.0]
         self.tv = 0.0
         self.rv = 0.0
 
@@ -111,7 +111,6 @@ class DeadReckoningNode(DTROS):
         self.loginfo("Initialized")
 
     def cb_ts_encoders(self, left_encoder, right_encoder):
-        print("Not happening")
         timestamp_now = rospy.get_time()
 
         # Use the average of the two encoder times as the timestamp
@@ -130,6 +129,8 @@ class DeadReckoningNode(DTROS):
         dtl = left_encoder.header.stamp - self.left_encoder_last.header.stamp
         dtr = right_encoder.header.stamp - self.right_encoder_last.header.stamp
         if dtl.to_sec() < 0 or dtr.to_sec() < 0:
+            # self.left_encoder_last = left_encoder
+            # self.right_encoder_last = right_encoder
             self.loginfo("Ignoring stale encoder message")
             return
 
@@ -244,7 +245,7 @@ class DeadReckoningNode(DTROS):
 
         t.transform = Transform(
                     translation=Vector3(self.x, self.y, self.z), rotation=Quaternion(*self.q))
-        print(t)
+        # print(t)
         self._tf_broadcaster.sendTransform(t)
 
     @staticmethod
