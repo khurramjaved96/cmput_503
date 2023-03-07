@@ -13,6 +13,7 @@ from geometry_msgs.msg import Quaternion, Twist, Pose, Point, Vector3, Transform
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped
 from tf2_ros import TransformBroadcaster
+import tf2_ros
 
 from tf import transformations as tr
 
@@ -58,6 +59,7 @@ class DeadReckoningNode(DTROS):
         self.origin_frame = rospy.get_param("~origin_frame").replace("~", self.veh)
         self.target_frame = rospy.get_param("~target_frame").replace("~", self.veh)
         self.debug = rospy.get_param("~debug", False)
+        self.buffer = tf2_ros.Buffer()
 
         self.left_encoder_last = None
         self.right_encoder_last = None
@@ -107,10 +109,26 @@ class DeadReckoningNode(DTROS):
         self._print_every_sec = 30
         # tf broadcaster for odometry TF
         self._tf_broadcaster = TransformBroadcaster()
-
+        self.listener = tf2_ros.TransformListener(self.buffer)
         self.loginfo("Initialized")
 
     def cb_ts_encoders(self, left_encoder, right_encoder):
+
+        # try:
+        #     trans = self.buffer.lookup_transform("world", "odometry", rospy.Time(0),rospy.Duration(1.0))
+        #     pos = trans.transform.translation
+        #     ror = trans.transform.rotation
+        #     explicit_quat = [ror.x, ror.y, ror.z, ror.w]
+        #     roll, pitch, yaw = tf.transformations.euler_from_quaternion(explicit_quat)
+        #     print(pos, yaw)
+        #     print(self.x, self.y, self.z, self.yaw)
+        #     self.x = pos.x
+        #     self.y = pos.y
+        #     self.z = pos.z
+        #     self.yaw = yaw
+
+        # except Exception as e:
+        #     print(e)
         timestamp_now = rospy.get_time()
 
         # Use the average of the two encoder times as the timestamp

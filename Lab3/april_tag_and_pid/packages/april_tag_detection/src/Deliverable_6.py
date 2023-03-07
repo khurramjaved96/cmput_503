@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from turbojpeg import TurboJPEG, TJPF_GRAY
 from image_geometry import PinholeCameraModel
 from dt_apriltags import Detector
+from custom_msgs.srv import ODO
 
 import tf2_ros
 from duckietown.dtros import DTROS, NodeType, TopicType, DTParam, ParamType
