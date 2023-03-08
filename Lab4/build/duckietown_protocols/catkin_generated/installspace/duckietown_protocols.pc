@@ -1,0 +1,8 @@
+prefix=/home/khurramjaved/dt-ros-commons/install
+
+Name: duckietown_protocols
+Description: Description of duckietown_protocols
+Version: 1.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

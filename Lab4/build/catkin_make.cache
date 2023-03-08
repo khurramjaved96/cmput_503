@@ -1,0 +1,2 @@
+april_tag_detection:deadreckoning:duckietown:duckietown_demos:duckietown_msgs:duckietown_protocols:lane_following:led_emitter:my_package:ros_commons:ros_http_api
+-DCATKIN_DEVEL_PREFIX=/home/khurramjaved/dt-ros-commons/devel -DCMAKE_INSTALL_PREFIX=/home/khurramjaved/dt-ros-commons/install -G Unix Makefiles

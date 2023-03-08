@@ -1,0 +1,8 @@
+prefix=/home/khurramjaved/dt-ros-commons/devel
+
+Name: lane_following
+Description: Description of lane_following
+Version: 0.1.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

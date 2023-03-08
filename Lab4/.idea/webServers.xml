@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="a64532a8-c717-465d-88dc-82c401ad2b51" name="Googl">
+        <fileTransfer accessType="SFTP" host="10.241.148.176" port="22" sshConfigId="17af2c92-e13a-447b-9e55-9eda0c8c0127" sshConfig="khurramjaved@10.241.148.176:22 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="a2a3ef2f-2f7a-4a37-b5fb-908ab8f4517b" name="Ducki">
+        <fileTransfer rootFolder="/data" accessType="SFTP" host="csc22938" port="22" sshConfigId="cd267fac-8933-430d-adbb-e1123f31e091" sshConfig="duckie@csc22938:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

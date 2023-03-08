@@ -1,0 +1,8 @@
+prefix=/home/khurramjaved/dt-ros-commons/install
+
+Name: ros_http_api
+Description: Description of ros_http_api
+Version: 1.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

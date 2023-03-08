@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig host="10.241.148.176" id="17af2c92-e13a-447b-9e55-9eda0c8c0127" keyPath="$USER_HOME$/.ssh/compute_canada" port="22" nameFormat="DESCRIPTIVE" username="khurramjaved" />
+    </configs>
+  </component>
+</project>
