@@ -25,6 +25,48 @@ LED_protocol:
       frequency_mask: [1,0,1,0,1]
       frequency: *f3
 
+    RIGHT:
+      color_mask: [1,1,1,1,1]
+      color_list: ['switchedoff','switchedoff','switchedoff','white','switchedoff']
+      frequency_mask: [0,0,0,1,0]
+      frequency: 1
+
+    LEFT:
+      color_mask: []
+      color_list: [ 'switchedoff','switchedoff','switchedoff','switchedoff','white' ]
+      frequency_mask: [ 0,0,0,0,1 ]
+      frequency: 1
+
+    FOLLOWING:
+      color_mask: []
+      color_list: [ 'green','green','green','green','green' ]
+      frequency_mask: [ 0,0,0,0,0 ]
+      frequency: 1
+
+    WAITING:
+      color_mask: []
+      color_list: [ 'blue','blue','blue','blue','blue' ]
+      frequency_mask: [ 0,0,0,0,0 ]
+      frequency: 1
+
+    STOP:
+      color_mask: []
+      color_list: [ 'red','red','red','red','red' ]
+      frequency_mask: [ 0,0,0,0,0 ]
+      frequency: 1
+
+    LANE:
+      color_mask: [ ]
+      color_list: [ 'purple','purple','purple','purple','purple' ]
+      frequency_mask: [ 0,0,0,0,0 ]
+      frequency: 1
+
+    INTERSECTION:
+      color_mask: [ 1,0,1,0,0 ]
+      color_list: [ 'red','switchedoff','red','switchedoff','switchedoff' ]
+      frequency_mask: [ 0,0,0,0,0 ]
+      frequency: 1
+
     CAR_SIGNAL_SACRIFICE_FOR_PRIORITY:
       color_mask: []
       color_list: ["white","red","white","red","white"]

@@ -1,7 +1,0 @@
-set(led_emitter_SETUP_PY_SETUP_MODULE "distutils.core")
-set(led_emitter_SETUP_PY_VERSION "1.0.0")
-set(led_emitter_SETUP_PY_SCRIPTS "")
-set(led_emitter_SETUP_PY_PACKAGES "rgb_led")
-set(led_emitter_SETUP_PY_PACKAGE_DIRS "include/rgb_led")
-set(led_emitter_SETUP_PY_MODULES "")
-set(led_emitter_SETUP_PY_MODULE_DIRS "")

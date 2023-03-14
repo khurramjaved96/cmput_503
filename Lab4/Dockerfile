@@ -1,35 +1,37 @@
 # parameters
-ARG REPO_NAME="dt-ros-commons"
-ARG MAINTAINER="Andrea F. Daniele (afdaniele@duckietown.com)"
-ARG DESCRIPTION="Base image containing common libraries and environment setup for ROS applications."
-ARG ICON="square"
+ARG REPO_NAME="ros-duckietown-test"
+ARG DESCRIPTION="ROS Subscriber node for color detection"
+ARG MAINTAINER="<Khurram Javed> (<kjaved@ualberta.ca>)"
+# pick an icon from: https://fontawesome.com/v4.7.0/icons/
+ARG ICON="cube"
 
-ARG ARCH=arm32v7
-ARG DISTRO=daffy
+# ==================================================>
+# ==> Do not change the code below this line
+ARG ARCH=arm64v8
+ARG DISTRO=ente
 ARG BASE_TAG=${DISTRO}-${ARCH}
-ARG BASE_IMAGE=dt-commons
+ARG BASE_IMAGE=dt-ros-commons
 ARG LAUNCHER=default
 
 # define base image
 ARG DOCKER_REGISTRY=docker.io
-FROM ${DOCKER_REGISTRY}/duckietown/${BASE_IMAGE}:${BASE_TAG} as base
+FROM ${DOCKER_REGISTRY}/duckietown/${BASE_IMAGE}:${BASE_TAG} as BASE
 
 # recall all arguments
+ARG ARCH
+ARG DISTRO
 ARG REPO_NAME
 ARG DESCRIPTION
 ARG MAINTAINER
 ARG ICON
-ARG ARCH
-ARG DISTRO
-ARG ROS_DISTRO
 ARG BASE_TAG
 ARG BASE_IMAGE
 ARG LAUNCHER
 
-# configure environment
-ENV ROS_LANG_DISABLE gennodejs:geneus:genlisp
+# check build arguments
+RUN dt-build-env-check "${REPO_NAME}" "${MAINTAINER}" "${DESCRIPTION}"
 
-# define and create repository path
+# define/create repository path
 ARG REPO_PATH="${CATKIN_WS_DIR}/src/${REPO_NAME}"
 ARG LAUNCH_PATH="${LAUNCH_DIR}/${REPO_NAME}"
 RUN mkdir -p "${REPO_PATH}"
@@ -45,19 +47,17 @@ ENV DT_REPO_PATH "${REPO_PATH}"
 ENV DT_LAUNCH_PATH "${LAUNCH_PATH}"
 ENV DT_LAUNCHER "${LAUNCHER}"
 
-# create repo directory
-RUN mkdir -p "${REPO_PATH}"
-
 # install apt dependencies
 COPY ./dependencies-apt.txt "${REPO_PATH}/"
-RUN dt-apt-install "${REPO_PATH}/dependencies-apt.txt"
+COPY ./image_demo.jpg "${REPO_PATH}/"
+RUN dt-apt-install ${REPO_PATH}/dependencies-apt.txt
 
-# install python dependencies
-ARG PIP_INDEX_URL="https://pypi.org/simple/"
+# install python3 dependencies
+ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
-
+RUN echo PIP_INDEX_URL=${PIP_INDEX_URL}
 COPY ./dependencies-py3.* "${REPO_PATH}/"
-RUN dt-pip3-install "${REPO_PATH}/dependencies-py3.*"
+RUN python3 -m pip install  -r ${REPO_PATH}/dependencies-py3.txt
 
 # copy the source code
 COPY ./packages "${REPO_PATH}/packages"
@@ -69,6 +69,7 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
 
 # install launcher scripts
 COPY ./launchers/. "${LAUNCH_PATH}/"
+COPY ./launchers/default.sh "${LAUNCH_PATH}/"
 RUN dt-install-launchers "${LAUNCH_PATH}"
 
 # define default command
@@ -84,3 +85,5 @@ LABEL org.duckietown.label.module.type="${REPO_NAME}" \
     org.duckietown.label.base.image="${BASE_IMAGE}" \
     org.duckietown.label.base.tag="${BASE_TAG}" \
     org.duckietown.label.maintainer="${MAINTAINER}"
+# <== Do not change the code above this line
+# <==================================================

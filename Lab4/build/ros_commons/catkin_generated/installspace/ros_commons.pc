@@ -1,8 +1,0 @@
-prefix=/home/khurramjaved/dt-ros-commons/install
-
-Name: ros_commons
-Description: Description of ros_commons
-Version: 1.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

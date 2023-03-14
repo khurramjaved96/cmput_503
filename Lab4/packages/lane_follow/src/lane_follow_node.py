@@ -3,8 +3,8 @@
 import rospy
 
 from duckietown.dtros import DTROS, NodeType
-from sensor_msgs.msg import CameraInfo, CompressedImage
-from std_msgs.msg import Float32
+from sensor_msgs.msg import CameraInfo, CompressedImage, Range
+from std_msgs.msg import Float32, String
 from dt_apriltags import Detector
 from turbojpeg import TurboJPEG
 import cv2
@@ -12,6 +12,8 @@ import numpy as np
 import tf2_ros
 from duckietown_msgs.msg import WheelsCmdStamped, Twist2DStamped
 
+from duckietown_msgs.msg import LEDPattern
+from duckietown_msgs.srv import SetCustomLEDPattern, ChangePattern
 
 import cv2
 import rospy
@@ -23,24 +25,25 @@ from concurrent.futures import ThreadPoolExecutor
 from turbojpeg import TurboJPEG, TJPF_GRAY
 from image_geometry import PinholeCameraModel
 from dt_apriltags import Detector
-from custom_msgs.srv import ODO
 
 import tf2_ros
 from duckietown.dtros import DTROS, NodeType, TopicType, DTParam, ParamType
-from geometry_msgs.msg import Quaternion, Twist, Pose, Point, Vector3, TransformStamped, Transform
-from tf2_ros import TransformBroadcaster, Buffer
-from tf import transformations as tr
 from duckietown_msgs.msg import AprilTagDetectionArray, AprilTagDetection
 from sensor_msgs.msg import CameraInfo, CompressedImage
-from geometry_msgs.msg import Transform, Vector3, Quaternion
-from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 import tf
+
+STATES = ["STOP", "FOLLOWING", "WAITING", "LANE", "LEFT", "RIGHT", "STRAIGHT"]
 
 ROAD_MASK = [(20, 60, 0), (50, 255, 255)]
 DEBUG = False
 ENGLISH = False
 
+RIGHT = [58, 133]
+LEFT = [62, 153]
+BOTH = [162, 169]
+
 intersection_tags = [153, 162, 58, 62, 133, 169]
+
 
 class LaneFollowNode(DTROS):
 
@@ -48,7 +51,7 @@ class LaneFollowNode(DTROS):
         super(LaneFollowNode, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
         self.node_name = node_name
         self.veh = rospy.get_param("~veh")
-
+        self.current_state = "LANE"
         # get static parameters
         self.family = rospy.get_param("~family", "tag36h11")
         self.ndetectors = rospy.get_param("~ndetectors", 1)
@@ -61,14 +64,17 @@ class LaneFollowNode(DTROS):
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
         self.buffer = tf2_ros.Buffer()
         self.stop_at_time = 0
-
-
-        self.flag = False
-        self.stop_flag = False
+        self.tail_stop_time = 0
+        self.last_tail_detection = 0
+        self.intersection_begin_time = 0
         # dynamic parameter
         self.detection_freq = DTParam(
             "~detection_freq", default=-1, param_type=ParamType.INT, min_value=-1, max_value=30
         )
+
+        rospy.wait_for_service("/" + self.veh + '/led_emitter_node/set_pattern')
+        self.log("Service detected")
+        self.led_service = rospy.ServiceProxy("/" + self.veh + '/led_emitter_node/set_pattern', ChangePattern)
 
         # create a CV bridge object
         self._jpeg = TurboJPEG()
@@ -92,6 +98,10 @@ class LaneFollowNode(DTROS):
         self._cinfo_sub = rospy.Subscriber("/" + self.veh + "/camera_node/camera_info", CameraInfo, self._cinfo_cb,
                                            queue_size=1)
 
+        self.distance_sub = rospy.Subscriber("/" + self.veh + "/duckiebot_distance_node/distance", Float32,
+                                             self.distance_response,
+                                             queue_size=1)
+
         self.jpeg = TurboJPEG()
 
         self.loginfo("Initialized")
@@ -102,11 +112,11 @@ class LaneFollowNode(DTROS):
             self.offset = -220
         else:
             self.offset = 220
-        self.velocity = 0.4
+        self.velocity = 0.14
         self.twist = Twist2DStamped(v=self.velocity, omega=0)
 
-        self.P = 0.049
-        self.D = -0.004
+        self.P = 0.010
+        self.D = -0.002
         self.last_error = 0
         self.last_time = rospy.get_time()
 
@@ -126,7 +136,6 @@ class LaneFollowNode(DTROS):
             )
             for _ in range(self.ndetectors)
         ]
-
 
         # Shutdown hook
         rospy.on_shutdown(self.hook)
@@ -157,174 +166,197 @@ class LaneFollowNode(DTROS):
             self._cinfo_sub.shutdown()
         except BaseException:
             pass
+    def change_color(self, color_name):
+        p = String()
+        # self.log(str(p))
+        try:
+            p.data = color_name
+            val = self.led_service(p)
+        except Exception as e:
+            self.log(str(e))
 
 
+    def distance_response(self, msg):
+        # self.log(str(msg))
+        try:
+            msg = msg.data
+            # self.log("Range = " + str(msg))
+            self.last_tail_detection = rospy.get_time()
+            if msg < 0.50:
+                self.current_state = "WAITING"
+                self.log("Stopping and setting time to " + str(rospy.get_time()))
+                self.tail_stop_time = rospy.get_time()
+            elif msg > 0.50:
+                self.current_state = "FOLLOWING"
+                self.log("Moving")
+        except Exception as e:
+            self.log("Distance calculation crashed " + str(e))
 
     def detect_april_tags(self, detector_id, msg):
         # self.log("Trying to detect apriltag")
         # turn image message into grayscale image
-        with self.profiler("/cb/image/decode"):
-            img = self._jpeg.decode(msg.data, pixel_format=TJPF_GRAY)
-            # self.log("Image decoded")
-        # run input image through the rectification map
-        with self.profiler("/cb/image/rectify"):
-            img = cv2.remap(img, self._mapx, self._mapy, cv2.INTER_NEAREST)
-            # self.log("Image rectified")
-        # detect tags
-        with self.profiler("/cb/image/detection"):
-            tags = self._detectors[detector_id].detect(img, True, self._camera_parameters, self.tag_size)
-        # pack detections into a message
-        tags_msg = AprilTagDetectionArray()
-        tags_msg.header.stamp = rospy.Time.now()
-        tags_msg.header.frame_id = msg.header.frame_id
-        z_min = 100000
-        z_min_id = -1
-        index_i = -1
-        detec = None
-        tran = None
-        # print(tags)
-        if rospy.get_time() - self.stop_at_time > 2:
-            self.stop_flag = False
-            # self.log("Running the bot again")
-        for tag in tags:
-            # self.log("At-least one tag detected")
-            # print("SADASDS")
-            # print(Vector3(x=p[0], y=p[1], z=p[2]))
-            # self.log(str(tag.tag_id))
+        try:
+            with self.profiler("/cb/image/decode"):
+                img = self._jpeg.decode(msg.data, pixel_format=TJPF_GRAY)
+                # self.log("Image decoded")
+            # run input image through the rectification map
+            with self.profiler("/cb/image/rectify"):
+                img = cv2.remap(img, self._mapx, self._mapy, cv2.INTER_NEAREST)
+                # self.log("Image rectified")
+            # detect tags
+            with self.profiler("/cb/image/detection"):
+                tags = self._detectors[detector_id].detect(img, True, self._camera_parameters, self.tag_size)
+            # pack detections into a message
+            tags_msg = AprilTagDetectionArray()
+            tags_msg.header.stamp = rospy.Time.now()
+            tags_msg.header.frame_id = msg.header.frame_id
+            z_min = 100000
+            z_min_id = -1
+            index_i = -1
+            detec = None
+            tran = None
+            for tag in tags:
+                if int(tag.tag_id) in intersection_tags:
 
-            index_i += 1
-            # turn rotation matrix into quaternion
-            q = _matrix_to_quaternion(tag.pose_R)
-            p = tag.pose_t.T[0]
-            distance = p[2]
+                    index_i += 1
+                    # turn rotation matrix into quaternion
+                    q = _matrix_to_quaternion(tag.pose_R)
+                    p = tag.pose_t.T[0]
+                    distance = p[2]
+                    self.log("First position: p[0] val: " + str(p[0]))
+                    self.log("Second position: p[1] val: " + str(p[1]))
 
-            if distance < 0.6 and distance > 0.2 and self.flag == False:
-                self.log("Setting flag to True")
-                self.flag = True
-            if distance < 0.13 and self.flag:
-                self.log("Should stop here")
-                self.stop_at_time = rospy.get_time()
-                self.stop_flag = True
-                self.flag = False
-
-
-            # self.log("Distance = " + str(p[2]))
-            # if (p[2] < z_min or True):
-            #     z_min = p[2]
-            #     z_min_id = index_i
-            #     detec = detection
-            #     tran = Transform(
-            #         translation=Vector3(x=p[0], y=p[1], z=p[2]),
-            #         rotation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3]),
-            #     )
-
-            # tags_msg.detections.append(detection)
-        if(z_min != 100000):
-            self.log("Min index = " + str(z_min))
-        # self.log("Min tag ID = " + str(tags[z_min_id].tag_id))
-            # print("Message stamp", msg.header.stamp)
-
-
-
-        # if detec is not None:
-            # publish detections
-            # self.log("April tag detected")
-            # self._tag_pub.publish(detec)
-
-        # if self._img_pub.anybody_listening() and not self._renderer_busy:
-        #     self._renderer_busy = True
-        #     Thread(target=self._render_detections, args=(msg, img, tags)).start()
+                    if distance < 0.20 and rospy.get_time() - self.stop_at_time > 1:
+                        self.log("Should stop here")
+                        self.current_state = "STOP"
+                        self.stop_at_time = rospy.get_time()
+        except Exception as e:
+            self.log("April tag detection crashed reason: " + str(e))
 
     def callback(self, msg):
 
-        # # make sure we have received camera info
-        # if self._camera_parameters is None:
-        #     return
-        # # make sure we have a rectification map available
-        # if self._mapx is None or self._mapy is None:
-        #     return
+        try:
+            if(self.current_state == "STOP"):
+                self.change_color("STOP")
+            elif(self.current_state == "LEFT"):
+                self.change_color("LEFT")
+            elif (self.current_state == "RIGHT"):
+                self.change_color("RIGHT")
+            elif (self.current_state == "FOLLOWING"):
+                self.change_color("FOLLOWING")
+            elif (self.current_state == "WAITING"):
+                self.change_color("WAITING")
+            elif (self.current_state == "LANE"):
+                self.change_color("LANE")
 
-        # self.log("Recieving imagel")
-        # Code to detect aprilags
-        # make sure we have received camera info
-        if self._camera_parameters is None:
-            return
-        # make sure we have a rectification map available
-        if self._mapx is None or self._mapy is None:
-            return
-        # make sure somebody wants this
-        # make sure this is a good time to detect (always keep this as last check)
-        # if not self._detection_reminder.is_time(frequency=self.detection_freq.value):
-        #     return
-        # make sure we are still running
-        if self.is_shutdown:
-            return
-        # ---
-        # find the first available worker (if any)
-        for i in range(self.ndetectors):
-            if self._tasks[i] is None or self._tasks[i].done():
-                # submit this image to the pool
-                self._tasks[i] = self._workers.submit(self.detect_april_tags, i, msg)
-                break
+            if (self.current_state == "WAITING" or self.current_state == "FOLLOWING") and rospy.get_time() - self.last_tail_detection > 1 :
+                self.current_state = "LANE"
+            if self.current_state == "STOP" and rospy.get_time() - self.stop_at_time > 1:
+                self.log("2 seconds passed; moving")
+                self.current_state = "LANE"
+                self.log("Straight")
+                self.intersection_begin_time = rospy.get_time()
 
-        # self.log("Done with apriltag detection")
-        #         Done detecting apriltags
-        img = self.jpeg.decode(msg.data)
-        crop = img[300:-1, :, :]
-        crop_width = crop.shape[1]
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, ROAD_MASK[0], ROAD_MASK[1])
-        crop = cv2.bitwise_and(crop, crop, mask=mask)
-        contours, hierarchy = cv2.findContours(mask,
-                                               cv2.RETR_EXTERNAL,
-                                               cv2.CHAIN_APPROX_NONE)
+            # if rospy.get_time() - self.intersection_begin_time > 0.6 and self.current_state == "STRAIGHT":
+            #     self.current_state = "LANE"
+            #     self.log("switching to lane")
 
-        # Search for lane in front
-        max_area = 20
-        max_idx = -1
-        for i in range(len(contours)):
-            area = cv2.contourArea(contours[i])
-            if area > max_area:
-                max_idx = i
-                max_area = area
 
-        if max_idx != -1:
-            M = cv2.moments(contours[max_idx])
-            try:
-                cx = int(M['m10'] / M['m00'])
-                cy = int(M['m01'] / M['m00'])
-                self.proportional = cx - int(crop_width / 2) + self.offset
-                if DEBUG:
-                    cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
-                    cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
-            except:
-                pass
-        else:
-            self.proportional = None
+            if self._camera_parameters is None:
+                return
+            # make sure we have a rectification map available
+            if self._mapx is None or self._mapy is None:
+                return
+            # make sure somebody wants this
+            # make sure this is a good time to detect (always keep this as last check)
+            # if not self._detection_reminder.is_time(frequency=self.detection_freq.value):
+            #     return
+            # make sure we are still running
+            if self.is_shutdown:
+                return
+            # ---
+            # find the first available worker (if any)
+            # for i in range(self.ndetectors):
+            #     if self._tasks[i] is None or self._tasks[i].done():
+            #         # submit this image to the pool
+            #         self._tasks[i] = self._workers.submit(self.detect_april_tags, i, msg)
+            #         break
 
-        if DEBUG:
-            rect_img_msg = CompressedImage(format="jpeg", data=self.jpeg.encode(crop))
-            self.pub.publish(rect_img_msg)
+            # self.log("Done with apriltag detection")
+            #         Done detecting apriltags
+            img = self.jpeg.decode(msg.data)
+            crop = img[300:-1, :, :]
+            crop_width = crop.shape[1]
+            hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+            mask = cv2.inRange(hsv, ROAD_MASK[0], ROAD_MASK[1])
+            crop = cv2.bitwise_and(crop, crop, mask=mask)
+            contours, hierarchy = cv2.findContours(mask,
+                                                   cv2.RETR_EXTERNAL,
+                                                   cv2.CHAIN_APPROX_NONE)
+
+            # Search for lane in front
+            max_area = 20
+            max_idx = -1
+            for i in range(len(contours)):
+                area = cv2.contourArea(contours[i])
+                if area > max_area:
+                    max_idx = i
+                    max_area = area
+
+            if max_idx != -1:
+                M = cv2.moments(contours[max_idx])
+                try:
+                    cx = int(M['m10'] / M['m00'])
+                    cy = int(M['m01'] / M['m00'])
+                    self.proportional = cx - int(crop_width / 2) + self.offset
+                    if DEBUG:
+                        cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
+                        cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
+                except:
+                    pass
+            else:
+                self.proportional = None
+
+            if DEBUG:
+                rect_img_msg = CompressedImage(format="jpeg", data=self.jpeg.encode(crop))
+                self.pub.publish(rect_img_msg)
+        except Exception as e:
+            self.log("Callback function crashed " + str(e))
 
     def drive(self):
-        if self.proportional is None:
-            self.twist.omega = 0
-        else:
-            # P Term
-            P = -self.proportional * self.P
+        try:
+            if self.proportional is None:
+                self.twist.omega = 0
+            else:
+                # P Term
+                P = -self.proportional * self.P
 
-            # D Term
-            d_error = (self.proportional - self.last_error) / (rospy.get_time() - self.last_time)
-            self.last_error = self.proportional
-            self.last_time = rospy.get_time()
-            D = d_error * self.D
+                # D Term
+                d_error = (self.proportional - self.last_error) / (rospy.get_time() - self.last_time)
+                self.last_error = self.proportional
+                # self.log("Error = " + str(self.last_error))
+                self.last_time = rospy.get_time()
+                D = d_error * self.D
 
-            self.twist.v = self.velocity
-            if self.stop_flag:
-                self.twist.v = 0
-            self.twist.omega = P + D
-            if DEBUG:
-                self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
+                self.twist.v = self.velocity
+
+                self.twist.omega = P + D
+                if self.current_state == "STOP" or self.current_state == "WAITING":
+                    self.twist.v = 0
+                    self.twist.omega = 0
+                    self.proportional = None
+                    self.last_error = 0
+                    self.last_time = rospy.get_time()
+                # if self.current_state == "STRAIGHT":
+                #     self.twist.omega = 0
+                #     self.last_error = 0
+                #     self.proportional = None
+
+                # self.log("Velocity = " + str(self.twist.v))
+                if DEBUG:
+                    self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
+        except Exception as e:
+            self.log("Drive command failed " + str(e))
 
         self.vel_pub.publish(self.twist)
 
@@ -336,10 +368,12 @@ class LaneFollowNode(DTROS):
         for i in range(8):
             self.vel_pub.publish(self.twist)
 
+
 def _matrix_to_quaternion(r):
     T = np.array(((0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 1)), dtype=np.float64)
     T[0:3, 0:3] = r
     return tf.transformations.quaternion_from_matrix(T)
+
 
 if __name__ == "__main__":
     node = LaneFollowNode("lanefollow_node")

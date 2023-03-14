@@ -12,13 +12,14 @@ dt-launchfile-init
 # NOTE: Use the variable DT_REPO_PATH to know the absolute path to your code
 # NOTE: Use `dt-exec COMMAND` to run the main process (blocking process)
 
-# set module's health
-dt-set-module-healthy
-
 # launching app
-rosrun deadreckoning static_transform_broadcaster.py
-roslaunch deadreckoning deadreckoning_node.launch  veh:=csc22938
-
+#roscore &
+#sleep 5
+#dt-exec rosrun my_package my_publisher_node.py
+#dt-exec rosrun my_package my_subscriber_node.py
+dt-exec roslaunch lane_follow lane_follow_node.launch veh:=csc22940
+dt-exec roslaunch led_emitter led_emitter_node.launch veh:=csc22940
+dt-exec roslaunch duckiebot_detection duckiebot_detection_node.launch veh:=csc22940
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE
 

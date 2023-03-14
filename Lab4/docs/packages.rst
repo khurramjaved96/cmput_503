@@ -1,5 +1,5 @@
-Duckietown Module: dt-ros-commons
-=================================
+Duckietown Module: REPOSITORY_NAME_HERE
+=======================================
 
 .. toctree::
    :glob:

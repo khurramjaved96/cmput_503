@@ -1,8 +1,0 @@
-prefix=/home/khurramjaved/dt-ros-commons/devel
-
-Name: april_tag_detection
-Description: Description of april_tag_detection
-Version: 0.1.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

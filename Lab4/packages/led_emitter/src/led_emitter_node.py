@@ -7,6 +7,7 @@ from duckietown_msgs.srv import SetCustomLEDPatternResponse, ChangePatternRespon
 from duckietown_msgs.msg import LEDPattern
 from std_msgs.msg import ColorRGBA
 
+
 from duckietown.dtros import DTROS, TopicType, NodeType
 
 

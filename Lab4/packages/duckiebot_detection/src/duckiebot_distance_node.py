@@ -108,6 +108,7 @@ class DuckiebotDistanceNode(DTROS):
                     (R, jac) = cv2.Rodrigues(rotation_vector)
                     R_inv = np.transpose(R)
                     translation_vector = -np.dot(R_inv, translation_vector)
+                    # Use this to get x and y values
                     distance_to_vehicle = -translation_vector[2]
                     
                     #####publish the distance information to a topic###
