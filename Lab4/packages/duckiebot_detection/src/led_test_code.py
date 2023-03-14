@@ -65,14 +65,11 @@ class LaneFollowNode(DTROS):
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
         self.buffer = tf2_ros.Buffer()
         self.stop_at_time = 0
-        self.tail_stop_time = 0
+        self.last_stop_for_safety = 0
         self.last_tail_detection = 0
         self.last_service_message = 0
         self.intersection_begin_time = 0
-        self.CENTER = 320
-        self.last_x = None
-        self.total_steps_to_take = 0
-
+        self.start_following_time = 0
         # dynamic parameter
         self.detection_freq = DTParam(
             "~detection_freq", default=-1, param_type=ParamType.INT, min_value=-1, max_value=30
@@ -108,11 +105,7 @@ class LaneFollowNode(DTROS):
         self._cinfo_sub = rospy.Subscriber("/" + self.veh + "/camera_node/camera_info", CameraInfo, self._cinfo_cb,
                                            queue_size=1)
 
-        # self.distance_sub = rospy.Subscriber("/" + self.veh + "/duckiebot_distance_node/distance", Float32,
-        #                                      self.distance_response,
-        #                                      queue_size=1)
-
-        self.distance_sub = rospy.Subscriber("/" + self.veh + "/front_center_tof_driver_node/range", Range,
+        self.distance_sub = rospy.Subscriber("/" + self.veh + "/duckiebot_distance_node/distance", Float32,
                                              self.distance_response,
                                              queue_size=1)
 
@@ -124,27 +117,21 @@ class LaneFollowNode(DTROS):
 
         self.loginfo("Initialized")
 
-
         # PID Variables
         self.proportional = None
         if ENGLISH:
             self.offset = -220
         else:
-            self.offset = 200
-        self.velocity = 0.25
+            self.offset = 190
+        self.velocity = 0.12
         self.twist = Twist2DStamped(v=self.velocity, omega=0)
         self.center_x = None
-        self.hard_stop = False
         self.center_y = None
         self.P = 0.015
-        self.P_tail = 0.025
-        self.not_detected = True
-        self.D_tail = -0.002
         self.D = -0.002
-        self.pending_update = False
         self.last_error = 0
         self.last_time = rospy.get_time()
-        self.time_since_hard_stop = 0
+
 
         # self._detection_reminder = DTReminder(frequency=self.detection_freq.value)
         # camera info
@@ -194,61 +181,32 @@ class LaneFollowNode(DTROS):
             pass
 
     def change_color(self, color_name):
-        self.current_state = color_name
-        self.log("STATE = " + color_name)
         self.last_service_message = rospy.get_time()
-        # pass
-
-        # p = String()
-        # # self.log(str(p))
-        # try:
-        #     p.data = color_name
-        #     val = self.led_service(p)
-        # except Exception as e:
-        #     self.log(str(e))
-
-    def process_center(self, msg):
-        if(msg.detection.data):
-            self.last_tail_detection = rospy.get_time()
-            # for i in range(4):
-                # self.log("i = " + str(i))
-                # self.log("X = " + str(msg.corners[i].x) + " Y = " + str(msg.corners[i].y) + " Z = " + str(msg.corners[i].z))
-            self.log("Setting last x to " + str( msg.corners[3].x))
-            self.last_x = msg.corners[3].x
-            if (self.current_state != "FOLLOWING"):
-                self.current_state = "FOLLOWING"
-                self.change_color("FOLLOWING")
-
-
-    # def distance_response(self, msg):
-    #
-    #     try:
-    #         msg = msg.data
-    #         # self.log("Range = " + str(msg))
-    #         self.last_tail_detection = rospy.get_time()
-    #         if msg < 0.30:
-    #             if(self.current_state != "WAITING"):
-    #                 self.current_state = "WAITING"
-    #                 self.change_color("WAITING")
-    #                 self.log("Stopping and setting time to " + str(rospy.get_time()))
-    #             self.last_stop_for_safety = rospy.get_time()
-    #         elif msg > 0.30:
-    #             if(self.current_state != "FOLLOWING"):
-    #                 self.change_color("FOLLOWING")
-    #                 self.current_state = "FOLLOWING"
-    #                 self.log("Moving")
-    #
-    #
-    #     except Exception as e:
-    #         self.log("Distance calculation crashed " + str(e))
+        p = String()
+        try:
+            p.data = color_name
+            val = self.led_service(p)
+        except Exception as e:
+            self.log(str(e))
 
     def distance_response(self, msg):
-
+        # self.log(str(msg))
         try:
-            msg = msg.range
-            if msg < 0.10:
-                self.hard_stop = True
-                self.time_since_hard_stop = rospy.get_time()
+            msg = msg.data
+            # self.log("Range = " + str(msg))
+            self.last_tail_detection = rospy.get_time()
+            if msg < 0.50:
+                if(self.current_state != "WAITING"):
+                    self.current_state = "WAITING"
+                    self.change_color("WAITING")
+                    self.log("Stopping and setting time to " + str(rospy.get_time()))
+                self.last_stop_for_safety = rospy.get_time()
+            elif msg > 0.50:
+                if(self.current_state != "FOLLOWING"):
+                    self.change_color("FOLLOWING")
+                    self.current_state = "FOLLOWING"
+                    self.log("Moving")
+
 
         except Exception as e:
             self.log("Distance calculation crashed " + str(e))
@@ -292,23 +250,22 @@ class LaneFollowNode(DTROS):
     def callback(self, msg):
 
         try:
-            if(self.current_state == "FOLLOWING" and rospy.get_time() - self.last_tail_detection > 2):
+            if(self.current_state == "FOLLOWING" and rospy.get_time() - self.last_tail_detection > 1):
                 self.current_state = "LANE"
                 self.change_color("LANE")
-                # self.last_x = None
-            elif (self.hard_stop and rospy.get_time() - self.time_since_hard_stop > 0.2):
-                self.hard_stop = False
-
-            # elif self.current_state == "STOP" and rospy.get_time() - self.stop_at_time > 0.8:
-            #     self.log("0.8 seconds passed; moving")
-            #     if(rospy.get_time() - self.last_tail_detection < 0.5):
-            #         self.change_color("FOLLOWING")
-            #         self.current_state = "FOLLOWING"
-            #     else:
-            #         self.change_color("LANE")
-            #         self.current_state = "LANE"
-            #     self.stop_at_time = rospy.get_time()
-            #     self.intersection_begin_time = rospy.get_time()
+            elif (self.current_state == "WAITING") and rospy.get_time() - self.last_tail_detection > 3:
+                self.current_state = "LANE"
+                self.change_color("LANE")
+            elif self.current_state == "STOP" and rospy.get_time() - self.stop_at_time > 0.4:
+                self.log("0.4 seconds passed; moving")
+                if(rospy.get_time() - self.last_tail_detection > 0.5):
+                    self.change_color("FOLLOWING")
+                    self.current_state = "FOLLOWING"
+                else:
+                    self.change_color("LANE")
+                    self.current_state = "LANE"
+                self.stop_at_time = rospy.get_time()
+                self.intersection_begin_time = rospy.get_time()
 
 
             if self._camera_parameters is None:
@@ -343,93 +300,36 @@ class LaneFollowNode(DTROS):
                                                    cv2.CHAIN_APPROX_NONE)
 
             # Search for lane in front
-            if(self.current_state == "FOLLOWING"):
-                self.log("Gets here")
-                if(self.last_x is not None):
-                    self.proportional = (self.last_x - self.CENTER)*1
-                    self.log("Sedding proportional to " + str(self.proportional))
-                    self.pending_update = True
-                    self.last_x = None
-                    self.total_steps_to_take = 4
+            max_area = 20
+            max_idx = -1
+            for i in range(len(contours)):
+                area = cv2.contourArea(contours[i])
+                if area > max_area:
+                    max_idx = i
+                    max_area = area
 
+            if max_idx != -1:
+                M = cv2.moments(contours[max_idx])
+                try:
+                    cx = int(M['m10'] / M['m00'])
+                    cy = int(M['m01'] / M['m00'])
+                    self.proportional = cx - int(crop_width / 2) + self.offset
+                    if DEBUG:
+                        cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
+                        cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
+                except:
+                    pass
+            else:
+                self.proportional = None
 
-
-
-            elif(self.current_state == "LANE"):
-                max_area = 20
-                max_idx = -1
-                for i in range(len(contours)):
-                    area = cv2.contourArea(contours[i])
-                    if area > max_area:
-                        max_idx = i
-                        max_area = area
-
-                if max_idx != -1:
-                    M = cv2.moments(contours[max_idx])
-                    try:
-                        cx = int(M['m10'] / M['m00'])
-                        cy = int(M['m01'] / M['m00'])
-                        self.proportional = cx - int(crop_width / 2) + self.offset
-                        if DEBUG:
-                            cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
-                            cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
-                    except:
-                        pass
-                else:
-                    self.proportional = None
-
-                if DEBUG:
-                    rect_img_msg = CompressedImage(format="jpeg", data=self.jpeg.encode(crop))
-                    self.pub.publish(rect_img_msg)
+            if DEBUG:
+                rect_img_msg = CompressedImage(format="jpeg", data=self.jpeg.encode(crop))
+                self.pub.publish(rect_img_msg)
         except Exception as e:
             self.log("Callback function crashed " + str(e))
 
     def drive(self):
-
-        if self.proportional is None:
-            self.twist.omega = 0
-
-        else:
-            # P Term
-            P = -self.proportional * self.P
-
-            # D Term
-            d_error = (self.proportional - self.last_error) / (rospy.get_time() - self.last_time)
-            self.last_error = self.proportional
-            # self.log("Error = " + str(self.last_error))
-            self.last_time = rospy.get_time()
-            D = d_error * self.D
-
-            self.twist.v = self.velocity
-
-            self.twist.omega = P + D
-
-
-            if DEBUG:
-                self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
-        # self.log("Sending control command")
-        if self.current_state == "STOP" or self.current_state == "WAITING" or self.hard_stop:
-            self.twist.v = 0
-            self.twist.omega = 0
-            self.last_error = 0
-            self.last_time = rospy.get_time()
-        if not self.pending_update:
-            if self.current_state == "FOLLOWING":
-                self.log("Stopping because can't see the leader")
-                self.twist.v = 0
-                self.twist.omega = 0
-                self.last_time = rospy.get_time()
-
-
-
-        self.vel_pub.publish(self.twist)
-        if self.pending_update:
-            self.total_steps_to_take -= 1
-            if self.total_steps_to_take == 0:
-                self.pending_update = False
-                # self.last_x = None
-
-
+        pass
 
     def hook(self):
         print("SHUTTING DOWN")

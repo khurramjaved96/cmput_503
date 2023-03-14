@@ -55,7 +55,7 @@ class DuckiebotDetectionNode(DTROS):
 
         # Publishers
         self.pub_centers = rospy.Publisher("/{}/duckiebot_detection_node/centers".format(self.host), VehicleCorners, queue_size=1)
-        self.pub_circlepattern_image = rospy.Publisher("/{}/duckiebot_detection_node/detection_image/compressed".format(self.host), CompressedImage, queue_size=1)
+        # self.pub_circlepattern_image = rospy.Publisher("/{}/duckiebot_detection_node/detection_image/compressed".format(self.host), CompressedImage, queue_size=1)
         self.pub_detection = rospy.Publisher("/{}/duckiebot_detection_node/detection".format(self.host), BoolStamped, queue_size=1)
         self.log("Detection Initialization completed.")
 
@@ -120,10 +120,10 @@ class DuckiebotDetectionNode(DTROS):
 
         self.pub_centers.publish(vehicle_centers_msg_out)
         self.pub_detection.publish(detection_flag_msg_out)
-        if self.pub_circlepattern_image.get_num_connections() > 0:
-            cv2.drawChessboardCorners(image_cv, tuple(self.circlepattern_dims), centers, detection)
-            image_msg_out = self.bridge.cv2_to_compressed_imgmsg(image_cv)
-            self.pub_circlepattern_image.publish(image_msg_out)
+        # if self.pub_circlepattern_image.get_num_connections() > 0:
+        #     cv2.drawChessboardCorners(image_cv, tuple(self.circlepattern_dims), centers, detection)
+        #     image_msg_out = self.bridge.cv2_to_compressed_imgmsg(image_cv)
+        #     self.pub_circlepattern_image.publish(image_msg_out)
 
 
 if __name__ == "__main__":
