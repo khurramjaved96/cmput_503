@@ -79,9 +79,9 @@ class LaneFollowNode(DTROS):
         )
 
 
-        # rospy.wait_for_service("/" + self.veh + '/led_emitter_node/set_pattern')
-        # self.log("Service detected")
-        # self.led_service = rospy.ServiceProxy("/" + self.veh + '/led_emitter_node/set_pattern', ChangePattern)
+        rospy.wait_for_service("/" + self.veh + '/led_emitter_node/set_pattern')
+        self.log("Service detected")
+        self.led_service = rospy.ServiceProxy("/" + self.veh + '/led_emitter_node/set_pattern', ChangePattern)
 
 
         # create a CV bridge object
@@ -194,23 +194,22 @@ class LaneFollowNode(DTROS):
             pass
 
     def change_color(self, color_name):
-        self.current_state = color_name
-        self.log("CURRENT STATE = " + color_name)
-        self.last_service_message = rospy.get_time()
-        # pass
 
-        # p = String()
-        # # self.log(str(p))
-        # try:
-        #     p.data = color_name
-        #     val = self.led_service(p)
-        # except Exception as e:
-        #     self.log(str(e))
+        p = String()
+        # self.log(str(p))
+        try:
+            p.data = color_name
+            val = self.led_service(p)
+        except Exception as e:
+            self.log(str(e))
 
     def process_center(self, msg):
         if(msg.detection.data):
             self.last_tail_detection = rospy.get_time()
-            # self.log("Setting last x to " + str( msg.corners[3].x))
+            # for i in range(4):
+                # self.log("i = " + str(i))
+                # self.log("X = " + str(msg.corners[i].x) + " Y = " + str(msg.corners[i].y) + " Z = " + str(msg.corners[i].z))
+            self.log("Setting last x to " + str( msg.corners[3].x))
             self.last_x = msg.corners[3].x
             if (self.current_state != "FOLLOWING"):
                 self.current_state = "FOLLOWING"
@@ -277,7 +276,7 @@ class LaneFollowNode(DTROS):
                     # self.log("First position: p[0] val: " + str(p[0]))
                     # self.log("Second position: p[1] val: " + str(p[1]))
 
-                    if distance < 0.20 and rospy.get_time() - self.stop_at_time > 4:
+                    if distance < 0.20 and rospy.get_time() - self.stop_at_time > 1:
                         self.log("Should stop here")
                         if(self.current_state != "STOP"):
                             self.current_state = "STOP"
@@ -296,13 +295,9 @@ class LaneFollowNode(DTROS):
             elif (self.hard_stop and rospy.get_time() - self.time_since_hard_stop > 0.2):
                 self.hard_stop = False
 
-            elif self.current_state == "STOP" and rospy.get_time() - self.stop_at_time > 0.8:
-                self.log("0.8 seconds passed; moving")
-                if(rospy.get_time() - self.last_tail_detection < 0.5):
-                    self.change_color("FOLLOWING")
-                else:
-                    self.change_color("LANE")
-                    self.current_state = "LANE"
+            elif self.current_state == "STOP" and rospy.get_time() - self.stop_at_time > 1.0:
+                self.change_color("RIGHT")
+
 
 
             if self._camera_parameters is None:
@@ -379,50 +374,50 @@ class LaneFollowNode(DTROS):
             self.log("Callback function crashed " + str(e))
 
     def drive(self):
-
-        if self.proportional is None:
-            self.twist.omega = 0
-
-        else:
-            # P Term
-            P = -self.proportional * self.P
-
-            # D Term
-            d_error = (self.proportional - self.last_error) / (rospy.get_time() - self.last_time)
-            self.last_error = self.proportional
-            # self.log("Error = " + str(self.last_error))
-            self.last_time = rospy.get_time()
-            D = d_error * self.D
-
-            self.twist.v = self.velocity
-
-            self.twist.omega = P + D
-
-
-            if DEBUG:
-                self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
-        # self.log("Sending control command")
-        if self.current_state == "STOP" or self.current_state == "WAITING" or self.hard_stop:
-            self.twist.v = 0
-            self.twist.omega = 0
-            self.last_error = 0
-            self.last_time = rospy.get_time()
-        if not self.pending_update:
-            if self.current_state == "FOLLOWING":
-                self.log("Stopping because can't see the leader")
-                self.twist.v = 0
-                self.twist.omega = 0
-                self.last_time = rospy.get_time()
-
-
-
-        self.vel_pub.publish(self.twist)
-        if self.pending_update:
-            self.total_steps_to_take -= 1
-            if self.total_steps_to_take == 0:
-                self.pending_update = False
-                # self.last_x = None
-
+        pass
+        # if self.proportional is None:
+        #     self.twist.omega = 0
+        #
+        # else:
+        #     # P Term
+        #     P = -self.proportional * self.P
+        #
+        #     # D Term
+        #     d_error = (self.proportional - self.last_error) / (rospy.get_time() - self.last_time)
+        #     self.last_error = self.proportional
+        #     # self.log("Error = " + str(self.last_error))
+        #     self.last_time = rospy.get_time()
+        #     D = d_error * self.D
+        #
+        #     self.twist.v = self.velocity
+        #
+        #     self.twist.omega = P + D
+        #
+        #
+        #     if DEBUG:
+        #         self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
+        # # self.log("Sending control command")
+        # if self.current_state == "STOP" or self.current_state == "WAITING" or self.hard_stop:
+        #     self.twist.v = 0
+        #     self.twist.omega = 0
+        #     self.last_error = 0
+        #     self.last_time = rospy.get_time()
+        # if not self.pending_update:
+        #     if self.current_state == "FOLLOWING":
+        #         self.log("Stopping because can't see the leader")
+        #         self.twist.v = 0
+        #         self.twist.omega = 0
+        #         self.last_time = rospy.get_time()
+        #
+        #
+        #
+        # self.vel_pub.publish(self.twist)
+        # if self.pending_update:
+        #     self.total_steps_to_take -= 1
+        #     if self.total_steps_to_take == 0:
+        #         self.pending_update = False
+        #         # self.last_x = None
+        #
 
 
     def hook(self):

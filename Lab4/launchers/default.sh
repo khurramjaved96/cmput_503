@@ -19,8 +19,8 @@ dt-launchfile-init
 #dt-exec rosrun my_package my_subscriber_node.py
 #dt-exec roslaunch lane_follow lane_follow_node.launch veh:=csc22940
 #dt-exec roslaunch lane_follow led_test_code.launch veh:=csc22940
-dt-exec roslaunch lane_follow lane_follow_node.launch veh:=csc22940
-#dt-exec roslaunch led_emitter led_emitter_node.launch veh:=csc22940
+dt-exec roslaunch lane_follow lane_follow_node_with_leds.launch veh:=csc22940
+dt-exec roslaunch led_emitter led_emitter_node.launch veh:=csc22940
 dt-exec roslaunch duckiebot_detection duckiebot_detection_node.launch veh:=csc22940
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE
