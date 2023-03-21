@@ -1,47 +1,13 @@
-# Template: template-ros
+# Don’t Crash! Tailing Behaviour
+## Introduction
+In this exercise, we managed to drive the duckiebot autonomously in a way that can follow a leader robot at a safe distance while it is in its sight, and also follow duckietown rules including stopping at intersections and changing LED lights when turning.
 
-This template provides a boilerplate repository
-for developing ROS-based software in Duckietown.
-
-**NOTE:** If you want to develop software that does not use
-ROS, check out [this template](https://github.com/duckietown/template-basic).
-
-
-## How to use it
-
-### 1. Fork this repository
-
-Use the fork button in the top-right corner of the github page to fork this template repository.
+In summary,  for stopping at intersections, we used the apriltag detections as landmarks to indicate if the robot is at an intersection and should stop or not.
+For maintaining a safe distance we used the duckiebot_distance_node, and for changing the LEDs, we used a service and changed the LED based on the duckiebot current state.
+We will provide more details for each utility of tailing behavior in the next sections.
 
 
-### 2. Create a new repository
+Deliverable: Video
+We recorded two videos. One shows the tailing behavior, and the other shows stopping at an intersection with an apriltag before turning right, and then tailing the leader for turning left. 
 
-Create a new repository on github.com while
-specifying the newly forked template repository as
-a template for your new repository.
-
-
-### 3. Define dependencies
-
-List the dependencies in the files `dependencies-apt.txt` and
-`dependencies-py3.txt` (apt packages and pip packages respectively).
-
-
-### 4. Place your code
-
-Place your code in the directory `/packages/` of
-your new repository.
-
-
-### 5. Setup launchers
-
-The directory `/launchers` can contain as many launchers (launching scripts)
-as you want. A default launcher called `default.sh` must always be present.
-
-If you create an executable script (i.e., a file with a valid shebang statement)
-a launcher will be created for it. For example, the script file 
-`/launchers/my-launcher.sh` will be available inside the Docker image as the binary
-`dt-launcher-my-launcher`.
-
-When launching a new container, you can simply provide `dt-launcher-my-launcher` as
-command.
+The tailing and lane following demo is available at: https://youtu.be/MJdsZcV8NqE whereas the right and left turn demo is available at: https://www.youtube.com/shorts/nBxF645L9DM
