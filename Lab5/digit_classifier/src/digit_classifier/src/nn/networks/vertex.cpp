@@ -1,6 +1,7 @@
 //
-// Created by Khurram Javed on 2022-09-23.
+// Created by Khurram Javed on 2023-03-12.
 //
+
 
 #include "../../../include/nn/networks/vertex.h"
 #include <random>
@@ -20,7 +21,7 @@ Vertex::Vertex() {
   this->max_value = 10;
   this->min_value = -10;
   this->utility = 0;
-  this->type = "undefined";
+  this->type = "linear";
 };
 
 float Vertex::forward() {

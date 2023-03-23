@@ -1,7 +1,3 @@
-//
-// Created by Khurram Javed on 2022-09-23.
-//
-
 
 #include "../../../include/nn/networks/graph.h"
 #include <random>

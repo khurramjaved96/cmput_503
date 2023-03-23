@@ -43,7 +43,7 @@ ${catkin_INCLUDE_DIRS}
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 file(GLOB helloworld_SRC CONFIGURE_DEPENDS "*.h" "*.cpp")
-add_executable(talker src/talker.cpp include/nn/networks/graph.h include/utils.h src/utils.cpp src/nn/networks/graph.cpp
+add_executable(talker src/classify.cpp include/nn/networks/graph.h include/utils.h src/utils.cpp src/nn/networks/graph.cpp
          src/nn/networks/graph.cpp src/nn/networks/edge.cpp src/nn/networks/vertex.cpp
         include/nn/networks/vertex.h include/nn/weight_initializer.h src/nn/weight_initializer.cpp include/nn/weight_optimizer.h src/nn/weight_optimizer.cpp
         src/nn/networks/graph_utility_prop_implementations.cpp src/nn/architecture_initializer.cpp )

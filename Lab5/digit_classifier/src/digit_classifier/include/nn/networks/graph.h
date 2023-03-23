@@ -1,6 +1,7 @@
 //
-// Created by Khurram Javed on 2022-08-30.
+// Created by Khurram Javed on 2023-03-12.
 //
+
 
 #ifndef INCLUDE_NN_NETWORKS_GRAPH_H_
 #define INCLUDE_NN_NETWORKS_GRAPH_H_
@@ -40,6 +41,10 @@ public:
   void SetInputVertices(int input_vertices);
   std::mt19937 mt;
   int output_vertex_index;
+  std::vector<float> prediction_logits;
+  float softmax_noralization_term;
+  std::vector<float> prediction_probabilites;
+  int output_vertices;
   float prediction;
   std::vector<Vertex *> list_of_vertices;
   std::vector<int> get_distribution_of_values();
@@ -56,10 +61,10 @@ public:
   float get_prediction();
   void update_weights();
   void reset_feature();
+  float compute_cross_entropy(std::vector<float> labels);
   std::string serialize_graph();
   virtual void update_utility() = 0;
 };
-
 
 class GraphLinearAssumptionUtility : public Graph {
 protected:
@@ -71,7 +76,6 @@ public:
                                float utility_decay_rate);
   void update_utility() override;
 };
-
 
 class GradientUtility : public Graph {
 protected:

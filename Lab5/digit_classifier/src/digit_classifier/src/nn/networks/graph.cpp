@@ -1,14 +1,15 @@
 //
-// Created by Khurram Javed on 2022-08-30.
+// Created by Khurram Javed on 2023-03-12.
 //
 
 #include "../../../include/nn/networks/graph.h"
 #include "../../../include/nn/networks/vertex.h"
+#include "../../../include/utils.h"
 #include <iostream>
+#include <math.h>
 #include <random>
 #include <string>
 #include <vector>
-
 // Graph implementation
 
 void Graph::add_edge(float weight, int from, int to, float step_size) {
@@ -16,7 +17,7 @@ void Graph::add_edge(float weight, int from, int to, float step_size) {
   list_of_vertices[to]->incoming_edges.push_back(my_edge);
   list_of_vertices[from]->sum_of_outgoing_weights += std::abs(weight);
 }
-
+//
 void Graph::prune_weight() {
   int address_min = -1;
   float value_min = 1000000;
@@ -50,15 +51,14 @@ std::string Graph::serialize_graph() {
   std::string empty_string;
   int counter = 0;
   for (auto v : this->list_of_vertices) {
-//    empty_string += std::to_string(v->id) + " [label=\"" +
-//                    std::to_string(counter) + "\"];\n";
     for (auto incoming : v->incoming_edges) {
-      empty_string += std::to_string(incoming.from)  + ", " + std::to_string(incoming.to) + ", " + std::to_string(incoming.weight);
+      empty_string += std::to_string(incoming.from) + " " +
+                      std::to_string(incoming.to) + " " +
+                      std::to_string(incoming.weight) + " " +
+                      v->type +"\n";
     }
     counter++;
   }
-//  empty_string += "}\n";
-//  std::cout << empty_string << std::endl;
   return empty_string;
 }
 
@@ -79,10 +79,16 @@ void Graph::print_utility() {
 
 Graph::Graph(int input_vertices, int seed) : mt(seed) {
 
+  this->output_vertices = 10;
   this->input_vertices = input_vertices;
   Vertex *mem = new Vertex[input_vertices];
   for (int i = 0; i < input_vertices; i++) {
     this->list_of_vertices.push_back(&mem[i]);
+  }
+  for (int i = 0; i < output_vertices; i++) {
+    this->prediction_logits.push_back(0);
+    this->prediction_probabilites.push_back(0);
+    softmax_noralization_term = 1;
   }
 }
 
@@ -123,29 +129,84 @@ float Graph::update_values() {
           list_of_vertices[e.from]->forward() * e.weight;
     }
   }
-  this->prediction = list_of_vertices[list_of_vertices.size() - 1]->forward();
-  return this->prediction;
+  this->softmax_noralization_term = 0;
+  float max = -1000;
+  float max_id = -1;
+  int counter = 0;
+  for (int i = list_of_vertices.size() - this->output_vertices;
+       i < list_of_vertices.size(); i++) {
+    float val = list_of_vertices[i]->forward();
+    if (val > max) {
+      max = val;
+      max_id = counter;
+    }
+    counter++;
+  }
+  counter = 0;
+  for (int i = list_of_vertices.size() - this->output_vertices;
+       i < list_of_vertices.size(); i++) {
+    float val = exp(list_of_vertices[i]->forward() - max);
+    this->prediction_logits[counter] = val;
+    this->softmax_noralization_term += val;
+    counter++;
+  }
+  for (int i = 0; i < this->output_vertices; i++) {
+    this->prediction_probabilites[i] =
+        this->prediction_logits[i] / this->softmax_noralization_term;
+  }
+  //  print_vector(this->prediction_logits);
+  //  print_vector(this->prediction_probabilites);
+  //  std::cout << "Norm term " << this->softmax_noralization_term << std::endl;
+  return max_id;
+}
+
+float Graph::compute_cross_entropy(std::vector<float> labels) {
+  float loss = 0;
+  //  print_vector(labels);
+  //  std::cout << log(this->prediction_probabilites[0]) << std::endl;
+  for (int i = 0; i < this->output_vertices; i++) {
+    loss -= labels[i] * log(this->prediction_probabilites[i]);
+  }
+  return loss;
 }
 
 void Graph::estimate_gradient(float error) {
+  int label = int(error);
   for (int i = 0; i < list_of_vertices.size(); i++) {
     this->list_of_vertices[i]->d_out_d_vertex = 0;
     this->list_of_vertices[i]->d_out_d_vertex_before_non_linearity = 0;
   }
 
+  int counter = 0;
+  for (int i = list_of_vertices.size() - this->output_vertices;
+       i < list_of_vertices.size(); i++) {
+    if (counter == label) {
+      list_of_vertices[i]->d_out_d_vertex =
+          this->prediction_probabilites[counter] - 1;
+      list_of_vertices[i]->d_out_d_vertex_before_non_linearity =
+          this->prediction_probabilites[counter] - 1;
+    } else {
+      list_of_vertices[i]->d_out_d_vertex =
+          this->prediction_probabilites[counter];
+      list_of_vertices[i]->d_out_d_vertex_before_non_linearity =
+          this->prediction_probabilites[counter];
+    }
+    counter++;
+  }
+
   //  Back-prop implementation
-  this->list_of_vertices[list_of_vertices.size() - 1]->d_out_d_vertex = 1;
-  this->list_of_vertices[list_of_vertices.size() - 1]
-      ->d_out_d_vertex_before_non_linearity = 1;
   for (int i = list_of_vertices.size() - 1; i >= 0; i--) {
     this->list_of_vertices[i]->d_out_d_vertex_before_non_linearity =
         this->list_of_vertices[i]->d_out_d_vertex;
-    this->list_of_vertices[i]->d_out_d_vertex =
-        this->list_of_vertices[i]->backward(this->list_of_vertices[i]->value) *
-        this->list_of_vertices[i]->d_out_d_vertex;
+    if (i < list_of_vertices.size() - this->output_vertices) {
+      this->list_of_vertices[i]->d_out_d_vertex =
+          this->list_of_vertices[i]->backward(
+              this->list_of_vertices[i]->value) *
+          this->list_of_vertices[i]->d_out_d_vertex;
+    }
     for (auto &e : this->list_of_vertices[i]->incoming_edges) {
       e.gradient = this->list_of_vertices[e.from]->forward() *
-                   this->list_of_vertices[e.to]->d_out_d_vertex * error;
+                   this->list_of_vertices[e.to]->d_out_d_vertex;
       e.temp_gradient = this->list_of_vertices[e.from]->forward() *
                         this->list_of_vertices[e.to]->d_out_d_vertex;
       this->list_of_vertices[e.from]->d_out_d_vertex +=

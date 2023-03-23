@@ -1,6 +1,7 @@
 //
-// Created by Khurram Javed on 2022-09-23.
+// Created by Khurram Javed on 2023-03-12.
 //
+
 
 #ifndef INCLUDE_NN_NETWORKS_VERTEX_H_
 #define INCLUDE_NN_NETWORKS_VERTEX_H_
@@ -31,6 +32,8 @@ public:
   float max_value;
   float min_value;
 };
+
+
 
 class ReluVertex : public Vertex {
 
