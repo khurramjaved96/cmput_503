@@ -1,0 +1,1 @@
+CMakeLists.txt not found in /Users/khurramjaved/Projects/cmput_503/Lab5/digit_classifier Select CMakeLists.txt

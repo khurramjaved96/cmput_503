@@ -1,6 +1,7 @@
 //
-// Created by Khurram Javed on 2022-10-11.
+// Created by Khurram Javed on 2023-03-12.
 //
+
 
 #ifndef INCLUDE_NN_WEIGHT_INITIALIZER_H_
 #define INCLUDE_NN_WEIGHT_INITIALIZER_H_
