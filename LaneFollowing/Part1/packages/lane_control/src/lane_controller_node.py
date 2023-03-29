@@ -186,16 +186,16 @@ class LaneControllerNode(DTROS):
             default=10.0,
         )
 
-        self._led_signals = [
-            String("CAR_SIGNAL_LEFT"),
-            String("CAR_SIGNAL_STRAIGHT"),
-            String("CAR_SIGNAL_RIGHT"),
-        ]
-        self.params["~use_LEDs"] = DTParam(
-            "~use_LEDs",
-            param_type=ParamType.BOOL,
-            default=False,
-        )
+        # self._led_signals = [
+        #     String("CAR_SIGNAL_LEFT"),
+        #     String("CAR_SIGNAL_STRAIGHT"),
+        #     String("CAR_SIGNAL_RIGHT"),
+        # ]
+        # self.params["~use_LEDs"] = DTParam(
+        #     "~use_LEDs",
+        #     param_type=ParamType.BOOL,
+        #     default=False,
+        # )
 
         self.l_turn_v = DTParam(
             "~l_turn_v", default = 0.3,
@@ -236,22 +236,22 @@ class LaneControllerNode(DTROS):
 
         self.drive_running = False
 
-        # LED control
-        rospy.wait_for_service("/csc22939/led_emitter_node/set_pattern")
-        self.led_svc = rospy.ServiceProxy(
-            "/csc22939/led_emitter_node/set_pattern", ChangePattern,
-        )
+        # # LED control
+        # rospy.wait_for_service("/csc22939/led_emitter_node/set_pattern")
+        # self.led_svc = rospy.ServiceProxy(
+        #     "/csc22939/led_emitter_node/set_pattern", ChangePattern,
+        # )
 
-        if self.params["~use_LEDs"].value:
-            msg = ChangePatternRequest(String("WHITE"))
-            self.led_svc(msg)
-            msg = ChangePatternRequest(String("CAR_DRIVING"))
-            msg = ChangePatternRequest(String("CAR_DRIVING"))
-            msg = ChangePatternRequest(String("CAR_DRIVING"))
-            try:
-                resp = self.led_svc(msg)
-            except rospy.ServiceException as e:
-                rospy.logwarn(f"could not set LEDs: {e}")
+        # if self.params["~use_LEDs"].value:
+        #     msg = ChangePatternRequest(String("WHITE"))
+        #     self.led_svc(msg)
+        #     msg = ChangePatternRequest(String("CAR_DRIVING"))
+        #     msg = ChangePatternRequest(String("CAR_DRIVING"))
+        #     msg = ChangePatternRequest(String("CAR_DRIVING"))
+        #     try:
+        #         resp = self.led_svc(msg)
+        #     except rospy.ServiceException as e:
+        #         rospy.logwarn(f"could not set LEDs: {e}")
 
         rospy.sleep(2)  # Wait for other nodes to start
         self.log("Initialized!")
@@ -442,15 +442,15 @@ class LaneControllerNode(DTROS):
 
                 self.at_stop_line = False
 
-                # Set the LED signal lights
-                if self.params["~use_LEDs"].value:
-                    leds = self._led_signals[turn]
-                    rospy.loginfo(f"    Setting leds: {leds}")
-                    msg = ChangePatternRequest(leds)
-                    try:
-                        resp = self.led_svc(msg)
-                    except rospy.ServiceException as e:
-                        rospy.logwarn(f"could not set LEDs: {e}")
+                # # Set the LED signal lights
+                # if self.params["~use_LEDs"].value:
+                #     leds = self._led_signals[turn]
+                #     rospy.loginfo(f"    Setting leds: {leds}")
+                #     msg = ChangePatternRequest(leds)
+                #     try:
+                #         resp = self.led_svc(msg)
+                #     except rospy.ServiceException as e:
+                #         rospy.logwarn(f"could not set LEDs: {e}")
 
                 # Wait at the stop line
                 sleep_sec = 3
@@ -499,14 +499,14 @@ class LaneControllerNode(DTROS):
                 rospy.loginfo("    Stopping turn")
                 # rospy.loginfo(f"        v: {v_stop}, omega: {omega_stop}")
 
-                # Change the LED back to the driving state
-                if self.params["~use_LEDs"].value:
-                    rospy.loginfo(f"    Changing LEDS back to driving mode")
-                    msg = ChangePatternRequest(String("CAR_DRIVING"))
-                    try:
-                        resp = self.led_svc(msg)
-                    except rospy.ServiceException as e:
-                        rospy.logwarn(f"could not set LEDs: {e}")
+                # # Change the LED back to the driving state
+                # if self.params["~use_LEDs"].value:
+                #     rospy.loginfo(f"    Changing LEDS back to driving mode")
+                #     msg = ChangePatternRequest(String("CAR_DRIVING"))
+                #     try:
+                #         resp = self.led_svc(msg)
+                #     except rospy.ServiceException as e:
+                #         rospy.logwarn(f"could not set LEDs: {e}")
 
         if not self.at_obstacle_stop_line:  # Lane following
             # Compute errors
