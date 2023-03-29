@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   message_generation
   image_transport
+  duckietown_msgs
   cv_bridge
 )
 find_package(OpenCV)
