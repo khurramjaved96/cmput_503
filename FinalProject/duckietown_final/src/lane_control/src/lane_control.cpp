@@ -33,6 +33,25 @@ extern "C" {
 
 using namespace cv;
 
+int STRAIGHT = 56;
+int LEFT = 50;
+// int RIGHT = 56;
+int CROSSING = 163;
+int PARK1 = 207;
+int PARK2 = 226;
+int PARK3 = 228;
+int PARK4 = 75;
+int PARKBEFORE = 38;
+int PARKINGENTRACE = 227;
+
+int STOP_STATE = -100;
+int LEFT_TURN_STATE = -101;
+int RIGHT_TURN_STATE = -102;
+int GO_STRAIGH_STATE = -103;
+int NORMAL_NAVIGATION_STATE = -104;
+
+bool DEBUG = false;
+bool STOP = false;
 class LaneControl {
 public:
   static image_transport::Publisher pub;
@@ -40,9 +59,11 @@ public:
   static ros::Publisher lane_control_pub;
   static float old_centroid;
   static int global_t;
+  static int CURRENT_STATE;
   static apriltag_detector_t *td;
   static apriltag_family_t *tf;
   static ros::Time last_detection;
+  static ros::Time state_change_time;
   static std::vector<int> detected;
   LaneControl() {}
   static void imageCallback(const sensor_msgs::ImageConstPtr &msg) {
@@ -51,11 +72,16 @@ public:
 
     cv::Mat img = cv_bridge::toCvShare(msg, "bgr8")->image;
 
-    //    if(LaneControl::global_t%60==0){
-    //      cv::imwrite("/data/image" + std::to_string(LaneControl::global_t)
-    //      +".jpg", img);
-    //    }
-    cv::Mat cropped_image = img(cv::Range(230, 480), cv::Range(0, 640));
+    cv::Mat cropped_image;
+    if (CURRENT_STATE == GO_STRAIGH_STATE)
+      cropped_image = img(cv::Range(150, 250), cv::Range(250, 400));
+    else if (CURRENT_STATE == LEFT_TURN_STATE)
+      cropped_image = img(cv::Range(140, 480), cv::Range(0, 200));
+    else if (CURRENT_STATE == RIGHT_TURN_STATE)
+      cropped_image = img(cv::Range(270, 480), cv::Range(200, 640));
+    else
+      cropped_image = img(cv::Range(230, 480), cv::Range(0, 640));
+
     cv::Mat cropped_image_above = img(cv::Range(0, 250), cv::Range(110, 530));
 
     cv::Mat blackandwhite;
@@ -74,19 +100,31 @@ public:
       float dif = std::abs(det->p[1][1] - det->p[3][1]);
       float dif2 = std::abs(det->p[1][0] - det->p[3][0]);
       float area = dif * dif2;
-      if ((ros::Time::now() - LaneControl::last_detection).toSec() > 3 &&
-          area > 2500) {
-        //        LaneControl::detected.push_back(int(det->id));
-        std::cout
-            << "Tag " << int(det->id)
-            << " detected for the first time; taking appropriate action\n";
-        LaneControl::last_detection = ros::Time::now();
+      if ((ros::Time::now() - LaneControl::last_detection).toSec() > 2) {
+        if (area > 2500) {
+          if (int(det->id) == CROSSING)
+            LaneControl::change_state(STOP_STATE);
+          else if (int(det->id) == LEFT) {
+            LaneControl::change_state(LEFT_TURN_STATE);
+          } else if (int(det->id) == STRAIGHT) {
+            LaneControl::change_state(GO_STRAIGH_STATE);
+          }
+          LaneControl::last_detection = ros::Time::now();
+        }
       }
-
-      //      std::cout << "Apriltag detected = " << int(det->id)  << " area "
-      //      << area << std::endl;
     }
 
+    //    State specific computation
+    if (CURRENT_STATE == STOP_STATE &&
+        (ros::Time::now() - state_change_time).toSec() > 1) {
+      change_state(NORMAL_NAVIGATION_STATE);
+    } else if (CURRENT_STATE == GO_STRAIGH_STATE &&
+               (ros::Time::now() - state_change_time).toSec() > 4.0) {
+      change_state(NORMAL_NAVIGATION_STATE);
+    } else if (CURRENT_STATE == LEFT_TURN_STATE &&
+               (ros::Time::now() - state_change_time).toSec() > 2.0) {
+      change_state(NORMAL_NAVIGATION_STATE);
+    }
     sensor_msgs::ImagePtr msg3 =
         cv_bridge::CvImage(std_msgs::Header(), "bgr8", cropped_image_above)
             .toImageMsg();
@@ -97,140 +135,106 @@ public:
              COLOR_BGR2HSV); // converting BGR image to HSV and storing it in
                              // convert_to_HSV matrix//
 
-    int Hue_Lower_Value = 18;         // initial hue value(lower)//
-    int Hue_Lower_Upper_Value = 41;   // initial hue value(upper)//
-    int Saturation_Lower_Value = 66;  // initial saturation(lower)//
-    int Saturation_Upper_Value = 210; // initial saturation(upper)//
-    int Value_Lower = 100;            // initial value (lower)//
-    int Value_Upper = 255;            // initial saturation(upper)//
-
-    Mat yellow_lane_detection; // declaring matrix for window where object will
-                               // be detected//
-    inRange(convert_to_HSV,
-            Scalar(Hue_Lower_Value, Saturation_Lower_Value, Value_Lower),
-            Scalar(Hue_Lower_Upper_Value, Saturation_Upper_Value, Value_Upper),
+    Mat yellow_lane_detection; // declaring matrix for window where object
+                               // will be detected//
+    inRange(convert_to_HSV, Scalar(22, 66, 100), Scalar(41, 210, 255),
             yellow_lane_detection); // applying track-bar modified value of
                                     // track-bar//
 
-    Hue_Lower_Value = 46;        // initial hue value(lower)//
-    Hue_Lower_Upper_Value = 171; // initial hue value(upper)//
-    Saturation_Lower_Value = 0;  // initial saturation(lower)//
-    Saturation_Upper_Value = 82; // initial saturation(upper)//
-    Value_Lower = 174;           // initial value (lower)//
-    Value_Upper = 255;           // initial saturation(upper)//
+    Mat while_lane_detection;
+    if (DEBUG) {
 
-    Mat while_lane_detection; // declaring matrix for window where object will
-                              // be detected//
-                              //
-                              //    cvtColor(cropped_image, convert_to_HSV,
-    //             COLOR_BGR2HSV); // converting BGR image to HSV and storing it
-    //             in
-    //                             // convert_to_HSV matrix//
-    inRange(convert_to_HSV,
-            Scalar(Hue_Lower_Value, Saturation_Lower_Value, Value_Lower),
-            Scalar(Hue_Lower_Upper_Value, Saturation_Upper_Value, Value_Upper),
-            while_lane_detection); // applying track-bar modified value of
-                                   // track-bar//
-
-    Hue_Lower_Value = 0;          // initial hue value(lower)//
-    Hue_Lower_Upper_Value = 20;   // initial hue value(upper)//
-    Saturation_Lower_Value = 98;  // initial saturation(lower)//
-    Saturation_Upper_Value = 255; // initial saturation(upper)//
-    Value_Lower = 178;            // initial value (lower)//
-    Value_Upper = 255;            // initial saturation(upper)//
+      inRange(convert_to_HSV, Scalar(46, 0, 174), Scalar(171, 82, 255),
+              while_lane_detection); // applying track-bar modified value of
+                                     // track-bar//
+    }
 
     Mat duck_detection; // declaring matrix for window where object will
                         // be detected//
 
-    inRange(convert_to_HSV,
-            Scalar(Hue_Lower_Value, Saturation_Lower_Value, Value_Lower),
-            Scalar(Hue_Lower_Upper_Value, Saturation_Upper_Value, Value_Upper),
+    inRange(convert_to_HSV, Scalar(13, 114, 149), Scalar(22, 241, 243),
             duck_detection); // applying track-bar modified value of
                              // track-bar//
 
     duckietown_msgs::WheelsCmdStamped control_msg;
-    float avg_value = 0;
     float yellow_centroid = 0;
     float white_centroid = 0;
     float yellow_total = 0;
     float white_total = 0;
-    float centroid_white;
+    float duck_total = 0;
     for (int i = 0; i < cropped_image.rows; i++) {
       for (int j = 0; j < cropped_image.cols; j++) {
-        cropped_image.at<cv::Vec3b>(i, j)[0] = duck_detection.at<uchar>(i, j);
-        cropped_image.at<cv::Vec3b>(i, j)[1] =
-            yellow_lane_detection.at<uchar>(i, j);
-        cropped_image.at<cv::Vec3b>(i, j)[2] =
-            while_lane_detection.at<uchar>(i, j);
+        duck_total += float(duck_detection.at<uchar>(i, j)) / 255;
+
+        if (DEBUG) {
+          cropped_image.at<cv::Vec3b>(i, j)[0] = duck_detection.at<uchar>(i, j);
+          cropped_image.at<cv::Vec3b>(i, j)[2] =
+              while_lane_detection.at<uchar>(i, j);
+        }
 
         if ((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
-             float(cropped_image.cols)) > 255 * 0.8) {
-          //          std::cout << "Greter than that "
-          //                    << float(yellow_lane_detection.at<uchar>(i, j))
-          //                    *
-          //                           (float(j) / float(cropped_image.cols))
-          //                    << std::endl;
-          //          std::cout << float(yellow_lane_detection.at<uchar>(i, j))
-          //                    << std::endl;
-        }
-        if ((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
-             float(cropped_image.cols)) > 255 * 0.8) {
+             float(cropped_image.cols)) < 255 * 0.85) {
+          if (DEBUG)
+            cropped_image.at<cv::Vec3b>(i, j)[1] =
+                yellow_lane_detection.at<uchar>(i, j);
           yellow_total += float(yellow_lane_detection.at<uchar>(i, j));
           yellow_centroid += float(yellow_lane_detection.at<uchar>(i, j)) *
                              float(j) / float(cropped_image.cols);
         }
-        white_total += float(while_lane_detection.at<uchar>(i, j));
-        white_centroid += float(while_lane_detection.at<uchar>(i, j)) *
-                          float(j) / float(cropped_image.cols);
+
+        float(j) / float(cropped_image.cols);
       }
     }
-    if (white_total > 0)
-      white_centroid /= white_total;
+    if (duck_total > 0) {
+      duck_total /= cropped_image.rows * cropped_image.cols;
+      if (duck_total > 0.009) {
+        change_state(STOP_STATE);
+      }
+    }
+
     if (yellow_total > 0)
       yellow_centroid /= yellow_total;
-    // Fallback value if we can't see yellow
-    if (yellow_total == 0)
-      yellow_centroid = 1 - white_centroid;
+
     old_centroid = yellow_centroid;
-    sensor_msgs::ImagePtr msg2 =
-        cv_bridge::CvImage(std_msgs::Header(), "bgr8", cropped_image)
-            .toImageMsg();
-    LaneControl::pub.publish(msg2);
+    if (DEBUG) {
+      sensor_msgs::ImagePtr msg2 =
+          cv_bridge::CvImage(std_msgs::Header(), "bgr8", cropped_image)
+              .toImageMsg();
+      LaneControl::pub.publish(msg2);
+    }
     //    std::cout << "White centroid " << yellow_centroid << std::endl;
+    if (LaneControl::CURRENT_STATE != STOP_STATE) {
+      //    control_msg.stamp = msg->stamp;
+      bool right = false;
+      bool straight = false;
+      bool left = false;
+      if (yellow_centroid < 0.14)
+        left = true;
+      else if (yellow_centroid > 0.20)
+        right = true;
+      else
+        straight = true;
+
+      if (right) {
+        control_msg.vel_right = 0.05;
+        control_msg.vel_left = 0.6;
+      } else if (left) {
+        control_msg.vel_right = 0.6;
+        control_msg.vel_left = 0.05;
+      } else {
+        control_msg.vel_right = 0.3;
+        control_msg.vel_left = 0.3;
+      }
+      LaneControl::lane_control_pub.publish(control_msg);
+    }
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
-    //        std::cout << duration.count() << std::endl;
-
-    //    control_msg.stamp = msg->stamp;
-    bool right = false;
-    bool straight = false;
-    bool left = false;
-    if (yellow_centroid < 0.14)
-      left = true;
-    else if (yellow_centroid > 0.20)
-      right = true;
-    else
-      straight = true;
-
-    //    std::cout << "Going straigh\n";
-    //    if(1-white_centroid > yellow_centroid*1.1)
-    //      left = true;
-    //    else if(1 - white_centroid < 0.9*yellow_centroid)
-    //      right = true;
-    //    else
-    //      straight = true;
-
-    if (right) {
-      control_msg.vel_right = 0.05;
-      control_msg.vel_left = 0.6;
-    } else if (left) {
-      control_msg.vel_right = 0.6;
-      control_msg.vel_left = 0.05;
-    } else {
-      control_msg.vel_right = 0.3;
-      control_msg.vel_left = 0.3;
-    }
-    LaneControl::lane_control_pub.publish(control_msg);
+    std::cout << duration.count() << std::endl;
+  }
+  static void change_state(int state) {
+    std::cout << "Changing state to " << state << std::endl;
+    LaneControl::CURRENT_STATE = state;
+    state_change_time = ros::Time::now();
   }
 };
 
@@ -247,16 +251,19 @@ apriltag_detector_t *LaneControl::td = apriltag_detector_create();
 image_transport::Publisher LaneControl::pub;
 image_transport::Publisher LaneControl::april_tag_pub;
 ros::Time LaneControl::last_detection;
+ros::Time LaneControl::state_change_time;
 float LaneControl::old_centroid = 1;
 std::vector<int> LaneControl::detected;
 int LaneControl::global_t = 0;
-
+int LaneControl::CURRENT_STATE = NORMAL_NAVIGATION_STATE;
 ros::Publisher LaneControl::lane_control_pub;
+
 int main(int argc, char **argv) {
   std::cout << "OVERWRITING CONTROL COMMANDS\n";
   ros::init(argc, argv, "image_listener_control");
   ros::NodeHandle nh;
   LaneControl::last_detection = ros::Time::now();
+  LaneControl::state_change_time = ros::Time::now();
   apriltag_detector_add_family(LaneControl::td, LaneControl::tf);
   image_transport::ImageTransport it(nh);
   LaneControl::lane_control_pub =
