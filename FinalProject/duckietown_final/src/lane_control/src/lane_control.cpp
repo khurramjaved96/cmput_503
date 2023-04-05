@@ -35,20 +35,37 @@ using namespace cv;
 
 int STRAIGHT = 56;
 int LEFT = 50;
-// int RIGHT = 56;
+int RIGHT = 48;
 int CROSSING = 163;
-int PARK1 = 207;
-int PARK2 = 226;
-int PARK3 = 228;
-int PARK4 = 75;
+int PARK_FAR_LEFT = 207;
+int PARK_FAR_RIGHT = 228;
+int PARK_CLOSE_LEFT = 226;
+int PARK_CLOSE_RIGHT = 75;
 int PARKBEFORE = 38;
-int PARKINGENTRACE = 227;
+int PARKINGENTRACE_TAG = 227;
 
 int STOP_STATE = -100;
+int BOT_AVOIDANCE_STATE = -200;
 int LEFT_TURN_STATE = -101;
 int RIGHT_TURN_STATE = -102;
 int GO_STRAIGH_STATE = -103;
 int NORMAL_NAVIGATION_STATE = -104;
+int PARKING_STATE = -201;
+
+float HIGHER_LEFT = 0.5;
+float LOWER_LEFT = 0.0;
+
+float HIGHER_BOT_DETECTION = 1.0;
+float LOWER_BOT_DETECTION = 0.40;
+
+float HIGHER_NORMAL = 0.75;
+float LOWER_NORMAL = 0.0;
+
+float HIGHER_STRAIGHT = 0.60;
+float LOWER_STRAIGHT = 0.0;
+
+float HIGHER_RIGHT = 0.75;
+float LOWER_RIGHT = 0.0;
 
 bool DEBUG = false;
 bool STOP = false;
@@ -73,107 +90,138 @@ public:
     cv::Mat img = cv_bridge::toCvShare(msg, "bgr8")->image;
 
     cv::Mat cropped_image;
-    if (CURRENT_STATE == GO_STRAIGH_STATE)
-      cropped_image = img(cv::Range(150, 250), cv::Range(250, 400));
-    else if (CURRENT_STATE == LEFT_TURN_STATE)
-      cropped_image = img(cv::Range(140, 480), cv::Range(0, 200));
-    else if (CURRENT_STATE == RIGHT_TURN_STATE)
-      cropped_image = img(cv::Range(270, 480), cv::Range(200, 640));
-    else
-      cropped_image = img(cv::Range(230, 480), cv::Range(0, 640));
+    cropped_image = img(cv::Range(230, 480), cv::Range(0, 640));
 
     cv::Mat cropped_image_above = img(cv::Range(0, 250), cv::Range(110, 530));
+    cv::Mat crop_bot_detection = img(cv::Range(150, 250), cv::Range(150, 500));
 
-    cv::Mat blackandwhite;
-    cv::cvtColor(cropped_image_above, blackandwhite, cv::COLOR_BGR2GRAY);
+    // APRIL_TAG_DETECTION_CODE STARTS HERE
+    {
+      cv::Mat blackandwhite;
+      cv::cvtColor(cropped_image_above, blackandwhite, cv::COLOR_BGR2GRAY);
 
-    image_u8_t img_header = {.width = blackandwhite.cols,
-                             .height = blackandwhite.rows,
-                             .stride = blackandwhite.cols,
-                             .buf = blackandwhite.data};
-    zarray_t *detections =
-        apriltag_detector_detect(LaneControl::td, &img_header);
+      image_u8_t img_header = {.width = blackandwhite.cols,
+                               .height = blackandwhite.rows,
+                               .stride = blackandwhite.cols,
+                               .buf = blackandwhite.data};
 
-    for (int i = 0; i < zarray_size(detections); i++) {
-      apriltag_detection_t *det;
-      zarray_get(detections, i, &det);
-      float dif = std::abs(det->p[1][1] - det->p[3][1]);
-      float dif2 = std::abs(det->p[1][0] - det->p[3][0]);
-      float area = dif * dif2;
-      if ((ros::Time::now() - LaneControl::last_detection).toSec() > 2) {
-        if (area > 2500) {
-          if (int(det->id) == CROSSING)
-            LaneControl::change_state(STOP_STATE);
-          else if (int(det->id) == LEFT) {
-            LaneControl::change_state(LEFT_TURN_STATE);
-          } else if (int(det->id) == STRAIGHT) {
-            LaneControl::change_state(GO_STRAIGH_STATE);
+      zarray_t *detections =
+          apriltag_detector_detect(LaneControl::td, &img_header);
+
+      for (int i = 0; i < zarray_size(detections); i++) {
+        apriltag_detection_t *det;
+        zarray_get(detections, i, &det);
+        float dif = std::abs(det->p[1][1] - det->p[3][1]);
+        float dif2 = std::abs(det->p[1][0] - det->p[3][0]);
+        float area = dif * dif2;
+
+        if ((ros::Time::now() - LaneControl::last_detection).toSec() > 2) {
+
+          if (area > 3000) {
+            if (int(det->id) == CROSSING)
+              LaneControl::change_state(STOP_STATE);
+            else if (int(det->id) == LEFT) {
+              LaneControl::change_state(LEFT_TURN_STATE);
+            } else if (int(det->id) == STRAIGHT) {
+              std::cout << "Changing state to straight\n";
+              LaneControl::change_state(GO_STRAIGH_STATE);
+            } else if (int(det->id) == RIGHT) {
+              std::cout << "Changing state to straight\n";
+              LaneControl::change_state(RIGHT_TURN_STATE);
+            }
+            LaneControl::last_detection = ros::Time::now();
           }
-          LaneControl::last_detection = ros::Time::now();
         }
       }
     }
 
-    //    State specific computation
-    if (CURRENT_STATE == STOP_STATE &&
-        (ros::Time::now() - state_change_time).toSec() > 1) {
-      change_state(NORMAL_NAVIGATION_STATE);
-    } else if (CURRENT_STATE == GO_STRAIGH_STATE &&
-               (ros::Time::now() - state_change_time).toSec() > 4.0) {
-      change_state(NORMAL_NAVIGATION_STATE);
-    } else if (CURRENT_STATE == LEFT_TURN_STATE &&
-               (ros::Time::now() - state_change_time).toSec() > 2.0) {
-      change_state(NORMAL_NAVIGATION_STATE);
-    }
-    sensor_msgs::ImagePtr msg3 =
-        cv_bridge::CvImage(std_msgs::Header(), "bgr8", cropped_image_above)
-            .toImageMsg();
-    LaneControl::april_tag_pub.publish(msg3);
-
-    Mat convert_to_HSV; // declaring a matrix to store converted image//
-    cvtColor(cropped_image, convert_to_HSV,
-             COLOR_BGR2HSV); // converting BGR image to HSV and storing it in
-                             // convert_to_HSV matrix//
-
-    Mat yellow_lane_detection; // declaring matrix for window where object
-                               // will be detected//
-    inRange(convert_to_HSV, Scalar(22, 66, 100), Scalar(41, 210, 255),
-            yellow_lane_detection); // applying track-bar modified value of
-                                    // track-bar//
-
-    Mat while_lane_detection;
-    if (DEBUG) {
-
-      inRange(convert_to_HSV, Scalar(46, 0, 174), Scalar(171, 82, 255),
-              while_lane_detection); // applying track-bar modified value of
-                                     // track-bar//
+    // STATE CHANGES BASED ON TIME STARTS HERE
+    {
+      if (CURRENT_STATE == STOP_STATE &&
+          (ros::Time::now() - state_change_time).toSec() > 1) {
+        change_state(NORMAL_NAVIGATION_STATE);
+      } else if (CURRENT_STATE == GO_STRAIGH_STATE &&
+                 (ros::Time::now() - state_change_time).toSec() > 4.0) {
+        std::cout << "Changing state from straight to normal" << std::endl;
+        change_state(NORMAL_NAVIGATION_STATE);
+      } else if (CURRENT_STATE == LEFT_TURN_STATE &&
+                 (ros::Time::now() - state_change_time).toSec() > 3.0) {
+        change_state(NORMAL_NAVIGATION_STATE);
+      } else if (CURRENT_STATE == BOT_AVOIDANCE_STATE &&
+                 (ros::Time::now() - state_change_time).toSec() > 5.0) {
+        change_state(NORMAL_NAVIGATION_STATE);
+      }
     }
 
-    Mat duck_detection; // declaring matrix for window where object will
-                        // be detected//
+    // COLOR DETECTION USING HSV SLIDERS STARTS HERE
+    Mat convert_to_HSV, convert_to_HSV_up, yellow_lane_detection, bot_detection,
+        while_lane_detection, duck_detection;
+    {
+      cvtColor(cropped_image, convert_to_HSV,
+               COLOR_BGR2HSV); // converting BGR image to HSV and storing it in
+                               // convert_to_HSV matrix//
+      cvtColor(crop_bot_detection, convert_to_HSV_up,
+               COLOR_BGR2HSV); // c
 
-    inRange(convert_to_HSV, Scalar(13, 114, 149), Scalar(22, 241, 243),
-            duck_detection); // applying track-bar modified value of
-                             // track-bar//
+      inRange(convert_to_HSV, Scalar(22, 66, 100), Scalar(41, 210, 255),
+              yellow_lane_detection); // applying track-bar modified value of
+                                      // track-bar//
+      inRange(convert_to_HSV_up, Scalar(98, 122, 33), Scalar(110, 235, 99),
+              bot_detection); // applying track-bar modified value of
+                              // track-bar//
+      inRange(convert_to_HSV, Scalar(13, 114, 149), Scalar(22, 241, 243),
+              duck_detection); // applying track-bar modified value of
+                               // track-bar//
+
+      if (DEBUG) {
+
+        inRange(convert_to_HSV, Scalar(46, 0, 174), Scalar(171, 82, 255),
+                while_lane_detection); 
+      }
+    }
 
     duckietown_msgs::WheelsCmdStamped control_msg;
-    float yellow_centroid = 0;
-    float white_centroid = 0;
-    float yellow_total = 0;
-    float white_total = 0;
-    float duck_total = 0;
+    float yellow_centroid, white_centroid, yellow_total, white_total, bot_total,
+        duck_total;
+    yellow_centroid = white_centroid = yellow_total = white_total = bot_total =
+        duck_total = 0;
+
+    for (int i = 0; i < convert_to_HSV_up.rows; i++) {
+      for (int j = 0; j < convert_to_HSV_up.cols; j++) {
+        bot_total += float(bot_detection.at<uchar>(i, j)) / 255;
+      }
+    }
     for (int i = 0; i < cropped_image.rows; i++) {
       for (int j = 0; j < cropped_image.cols; j++) {
         duck_total += float(duck_detection.at<uchar>(i, j)) / 255;
 
         if (DEBUG) {
           cropped_image.at<cv::Vec3b>(i, j)[0] = duck_detection.at<uchar>(i, j);
-          cropped_image.at<cv::Vec3b>(i, j)[2] =
-              while_lane_detection.at<uchar>(i, j);
+        }
+        float LOWER = 0.0;
+        float HIGHER = 1.0;
+
+        if (LaneControl::CURRENT_STATE == LEFT_TURN_STATE) {
+          HIGHER = HIGHER_LEFT;
+          LOWER = LOWER_LEFT;
+        } else if (LaneControl::CURRENT_STATE == RIGHT_TURN_STATE) {
+          HIGHER = HIGHER_RIGHT;
+          LOWER = LOWER_RIGHT;
+        } else if (LaneControl::CURRENT_STATE == GO_STRAIGH_STATE) {
+          HIGHER = HIGHER_STRAIGHT;
+          LOWER = LOWER_STRAIGHT;
+        } else if (LaneControl::CURRENT_STATE == NORMAL_NAVIGATION_STATE) {
+          HIGHER = HIGHER_NORMAL;
+          LOWER = LOWER_NORMAL;
+        } else if (LaneControl::CURRENT_STATE == BOT_AVOIDANCE_STATE) {
+          HIGHER = HIGHER_BOT_DETECTION;
+          LOWER = LOWER_BOT_DETECTION;
         }
 
-        if ((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
-             float(cropped_image.cols)) < 255 * 0.85) {
+        if (((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
+              float(cropped_image.cols)) < 255 * HIGHER) &&
+            ((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
+              float(cropped_image.cols)) > 255 * LOWER)) {
           if (DEBUG)
             cropped_image.at<cv::Vec3b>(i, j)[1] =
                 yellow_lane_detection.at<uchar>(i, j);
@@ -181,7 +229,6 @@ public:
           yellow_centroid += float(yellow_lane_detection.at<uchar>(i, j)) *
                              float(j) / float(cropped_image.cols);
         }
-
         float(j) / float(cropped_image.cols);
       }
     }
@@ -189,6 +236,12 @@ public:
       duck_total /= cropped_image.rows * cropped_image.cols;
       if (duck_total > 0.009) {
         change_state(STOP_STATE);
+      }
+    }
+    if (bot_total > 0) {
+      bot_total /= convert_to_HSV_up.rows * convert_to_HSV_up.cols;
+      if (bot_total > 0.04 && CURRENT_STATE != BOT_AVOIDANCE_STATE) {
+        change_state(BOT_AVOIDANCE_STATE);
       }
     }
 
@@ -202,18 +255,32 @@ public:
               .toImageMsg();
       LaneControl::pub.publish(msg2);
     }
-    //    std::cout << "White centroid " << yellow_centroid << std::endl;
-    if (LaneControl::CURRENT_STATE != STOP_STATE) {
-      //    control_msg.stamp = msg->stamp;
+    auto t = (ros::Time::now() - state_change_time).toSec();
+    if (LaneControl::CURRENT_STATE != STOP_STATE &&
+        !((t < 1.0) && (CURRENT_STATE == BOT_AVOIDANCE_STATE ||
+                        CURRENT_STATE == LEFT_TURN_STATE ||
+                        CURRENT_STATE == RIGHT_TURN_STATE ||
+                        CURRENT_STATE == GO_STRAIGH_STATE))) {
+
       bool right = false;
       bool straight = false;
       bool left = false;
-      if (yellow_centroid < 0.14)
-        left = true;
-      else if (yellow_centroid > 0.20)
-        right = true;
-      else
-        straight = true;
+
+      if (LaneControl::CURRENT_STATE == BOT_AVOIDANCE_STATE) {
+        if (yellow_centroid < 0.86)
+          left = true;
+        else if (yellow_centroid > 0.80)
+          right = true;
+        else
+          straight = true;
+      } else {
+        if (yellow_centroid < 0.14)
+          left = true;
+        else if (yellow_centroid > 0.20)
+          right = true;
+        else
+          straight = true;
+      }
 
       if (right) {
         control_msg.vel_right = 0.05;
@@ -229,7 +296,6 @@ public:
     }
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
-    std::cout << duration.count() << std::endl;
   }
   static void change_state(int state) {
     std::cout << "Changing state to " << state << std::endl;
