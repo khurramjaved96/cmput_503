@@ -1,3 +1,5 @@
 # Machine Learning and Digit Recognition
 ## Abstract
 We found this week’s lab quite interesting. We did not manage to make the suggested solution work—training a model on MNIST using PyTorch and deployed on the robot—however we discovered that using an efficient implementation of neural networks, we can just train the classifier on the robot using real data from the duckietown. Learning on the actual data instead of MNIST solves the problem of distribution shift at train and test time, and the resulting predictions are much more accurate. Our approach is very general, and the system can be trained on arbitrary classes. For example, the images of digits can be replaced by images of animals, and just running the robot in the duckietown for a few hours would allow the system to classify animals, without any code changes. In the rest of the document, we provide details of our approach and answer all the questions asked in the lab document.
+
+More details of the code and results is available [here]](https://samuelfneumann.github.io/posts/duckie_5/).
