@@ -115,25 +115,62 @@ public:
       for (int i = 0; i < zarray_size(detections); i++) {
         apriltag_detection_t *det;
         zarray_get(detections, i, &det);
-        float dif = std::abs(det->p[1][1] - det->p[3][1]);
-        float dif2 = std::abs(det->p[1][0] - det->p[3][0]);
-        float area = dif * dif2;
-
-        if ((ros::Time::now() - LaneControl::last_detection).toSec() > 2) {
-
-          if (area > 3000) {
-            if (int(det->id) == CROSSING)
-              LaneControl::change_state(STOP_STATE);
-            else if (int(det->id) == LEFT) {
-              LaneControl::change_state(LEFT_TURN_STATE);
-            } else if (int(det->id) == STRAIGHT) {
-              std::cout << "Changing state to straight\n";
-              LaneControl::change_state(GO_STRAIGH_STATE);
-            } else if (int(det->id) == RIGHT) {
-              std::cout << "Changing state to straight\n";
-              LaneControl::change_state(RIGHT_TURN_STATE);
+        if (CURRENT_STATE == PARKING_STATE) {
+          if (int(det->id) == TARGET_PARK) {
+            x_avg = std::abs((float(det->p[0][0]) + float(det->p[1][0])) / 2);
+            std::cout << float(det->p[0][0]) << " " << float(det->p[1][0])
+                      << std::endl;
+            //            std::cout << "X_avg = " << x_avg << std::endl;
+          }
+        } else if (CURRENT_STATE == PARKING_LOT_ENTRANCE_STATE) {
+          if (int(det->id) == PARKING_ENTRANCE_TAG) {
+            x_avg = std::abs((float(det->p[0][0]) + float(det->p[1][0])) / 2);
+            std::cout << float(det->p[0][0]) << " " << float(det->p[1][0])
+                      << std::endl;
+            float dif = std::abs(det->p[1][1] - det->p[3][1]);
+            float dif2 = std::abs(det->p[1][0] - det->p[3][0]);
+            float area = dif * dif2;
+            if (area > 3500) {
+              if(TARGET_PARK == PARK_FAR_LEFT)
+                change_state(ROTATE_STATE);
+              else if(TARGET_PARK == PARK_FAR_RIGHT)
+                change_state(ROTATE_RIGHT_STATE);
             }
-            LaneControl::last_detection = ros::Time::now();
+            if(area > 2200){
+              if(TARGET_PARK == PARK_CLOSE_LEFT)
+                change_state(ROTATE_STATE);
+              else if(TARGET_PARK == PARK_CLOSE_RIGHT)
+                change_state(ROTATE_RIGHT_STATE);
+            }
+            std::cout << "X_avg = " << x_avg << std::endl;
+          }
+        } else if (CURRENT_STATE == ROTATE_STATE || CURRENT_STATE == ROTATE_RIGHT_STATE) {
+          if (int(det->id) == TARGET_PARK) {
+            change_state(PARKING_STATE);
+          }
+        } else {
+          float dif = std::abs(det->p[1][1] - det->p[3][1]);
+          float dif2 = std::abs(det->p[1][0] - det->p[3][0]);
+          float area = dif * dif2;
+
+          if ((ros::Time::now() - LaneControl::last_detection).toSec() > 2) {
+
+            if (area > 3000) {
+              if (int(det->id) == CROSSING)
+                LaneControl::change_state(STOP_STATE);
+              else if (int(det->id) == STOP_BEFORE_PARKING_TAG)
+                LaneControl::change_state(PARKING_LOT_ENTRANCE_STATE);
+              else if (int(det->id) == LEFT) {
+                LaneControl::change_state(LEFT_TURN_STATE);
+              } else if (int(det->id) == STRAIGHT) {
+                std::cout << "Changing state to straight\n";
+                LaneControl::change_state(GO_STRAIGH_STATE);
+              } else if (int(det->id) == RIGHT) {
+                std::cout << "Changing state to right\n";
+                //                LaneControl::change_state(RIGHT_TURN_STATE);
+              }
+              LaneControl::last_detection = ros::Time::now();
+            }
           }
         }
       }
