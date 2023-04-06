@@ -100,6 +100,7 @@ public:
     cv::Mat crop_bot_detection = img(cv::Range(150, 250), cv::Range(150, 500));
 
     // APRIL_TAG_DETECTION_CODE STARTS HERE
+    float x_avg = -1;
     {
       cv::Mat blackandwhite;
       cv::cvtColor(cropped_image_above, blackandwhite, cv::COLOR_BGR2GRAY);
