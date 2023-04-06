@@ -73,6 +73,7 @@ float LOWER_RIGHT = 0.0;
 
 bool DEBUG = false;
 bool STOP = false;
+long long int counter = 0;
 class LaneControl {
 public:
   static image_transport::Publisher pub;
@@ -183,7 +184,11 @@ public:
           (ros::Time::now() - state_change_time).toSec() > 1) {
         change_state(NORMAL_NAVIGATION_STATE);
       } else if (CURRENT_STATE == GO_STRAIGH_STATE &&
-                 (ros::Time::now() - state_change_time).toSec() > 4.0) {
+                 (ros::Time::now() - state_change_time).toSec() > 3.0) {
+        std::cout << "Changing state from straight to normal" << std::endl;
+        change_state(NORMAL_NAVIGATION_STATE);
+      } else if (CURRENT_STATE == RIGHT_TURN_STATE &&
+                 (ros::Time::now() - state_change_time).toSec() > 2.0) {
         std::cout << "Changing state from straight to normal" << std::endl;
         change_state(NORMAL_NAVIGATION_STATE);
       } else if (CURRENT_STATE == LEFT_TURN_STATE &&
@@ -197,100 +202,123 @@ public:
 
     // COLOR DETECTION USING HSV SLIDERS STARTS HERE
     Mat convert_to_HSV, convert_to_HSV_up, yellow_lane_detection, bot_detection,
-        while_lane_detection, duck_detection;
+        white_lane_detection, duck_detection, red_lane_detection;
     {
-      cvtColor(cropped_image, convert_to_HSV,
-               COLOR_BGR2HSV); // converting BGR image to HSV and storing it in
-                               // convert_to_HSV matrix//
-      cvtColor(crop_bot_detection, convert_to_HSV_up,
-               COLOR_BGR2HSV); // c
+      cvtColor(cropped_image, convert_to_HSV, COLOR_BGR2HSV);
+      if (CURRENT_STATE == PARKING_STATE) {
+        cvtColor(cropped_image_above, convert_to_HSV_up, COLOR_BGR2HSV);
+        inRange(convert_to_HSV_up, Scalar(22, 66, 100), Scalar(41, 210, 255),
+                yellow_lane_detection);
+        inRange(convert_to_HSV_up, Scalar(46, 0, 174), Scalar(171, 82, 255),
+                white_lane_detection);
+      } else {
+        cvtColor(crop_bot_detection, convert_to_HSV_up, COLOR_BGR2HSV);
+        inRange(convert_to_HSV, Scalar(22, 66, 100), Scalar(41, 210, 255),
+                yellow_lane_detection); // applying track-bar modified value of
+                                        // track-bar//
+        inRange(convert_to_HSV, Scalar(169, 128, 167), Scalar(179, 159, 228),
+                red_lane_detection); // applying track-bar modified value of
+                                     // track-bar//
+        inRange(convert_to_HSV_up, Scalar(98, 122, 33), Scalar(110, 235, 99),
+                bot_detection); // applying track-bar modified value of
+                                // track-bar//
+        inRange(convert_to_HSV, Scalar(13, 114, 149), Scalar(22, 241, 243),
+                duck_detection); // applying track-bar modified value of
+                                 // track-bar//
 
-      inRange(convert_to_HSV, Scalar(22, 66, 100), Scalar(41, 210, 255),
-              yellow_lane_detection); // applying track-bar modified value of
-                                      // track-bar//
-      inRange(convert_to_HSV_up, Scalar(98, 122, 33), Scalar(110, 235, 99),
-              bot_detection); // applying track-bar modified value of
-                              // track-bar//
-      inRange(convert_to_HSV, Scalar(13, 114, 149), Scalar(22, 241, 243),
-              duck_detection); // applying track-bar modified value of
-                               // track-bar//
+        if (DEBUG) {
 
-      if (DEBUG) {
-
-        inRange(convert_to_HSV, Scalar(46, 0, 174), Scalar(171, 82, 255),
-                while_lane_detection); 
+          inRange(convert_to_HSV, Scalar(46, 0, 174), Scalar(171, 82, 255),
+                  white_lane_detection);
+        }
       }
     }
 
     duckietown_msgs::WheelsCmdStamped control_msg;
     float yellow_centroid, white_centroid, yellow_total, white_total, bot_total,
         duck_total;
-    yellow_centroid = white_centroid = yellow_total = white_total = bot_total =
-        duck_total = 0;
-
-    for (int i = 0; i < convert_to_HSV_up.rows; i++) {
-      for (int j = 0; j < convert_to_HSV_up.cols; j++) {
-        bot_total += float(bot_detection.at<uchar>(i, j)) / 255;
-      }
-    }
-    for (int i = 0; i < cropped_image.rows; i++) {
-      for (int j = 0; j < cropped_image.cols; j++) {
-        duck_total += float(duck_detection.at<uchar>(i, j)) / 255;
-
-        if (DEBUG) {
-          cropped_image.at<cv::Vec3b>(i, j)[0] = duck_detection.at<uchar>(i, j);
+    if (CURRENT_STATE == PARKING_STATE) {
+      for (int i = 0; i < cropped_image_above.rows; i++) {
+        for (int j = 0; j < cropped_image_above.cols; j++) {
+          cropped_image_above.at<cv::Vec3b>(i, j)[1] =
+              yellow_lane_detection.at<uchar>(i, j);
+          cropped_image_above.at<cv::Vec3b>(i, j)[0] =
+              white_lane_detection.at<uchar>(i, j);
+          cropped_image_above.at<cv::Vec3b>(i, j)[2] = 0;
         }
-        float LOWER = 0.0;
-        float HIGHER = 1.0;
+      }
+      sensor_msgs::ImagePtr msg2 =
+          cv_bridge::CvImage(std_msgs::Header(), "bgr8", cropped_image_above)
+              .toImageMsg();
+      LaneControl::pub.publish(msg2);
+    } else {
 
-        if (LaneControl::CURRENT_STATE == LEFT_TURN_STATE) {
-          HIGHER = HIGHER_LEFT;
-          LOWER = LOWER_LEFT;
-        } else if (LaneControl::CURRENT_STATE == RIGHT_TURN_STATE) {
-          HIGHER = HIGHER_RIGHT;
-          LOWER = LOWER_RIGHT;
-        } else if (LaneControl::CURRENT_STATE == GO_STRAIGH_STATE) {
-          HIGHER = HIGHER_STRAIGHT;
-          LOWER = LOWER_STRAIGHT;
-        } else if (LaneControl::CURRENT_STATE == NORMAL_NAVIGATION_STATE) {
-          HIGHER = HIGHER_NORMAL;
-          LOWER = LOWER_NORMAL;
-        } else if (LaneControl::CURRENT_STATE == BOT_AVOIDANCE_STATE) {
-          HIGHER = HIGHER_BOT_DETECTION;
-          LOWER = LOWER_BOT_DETECTION;
+      yellow_centroid = white_centroid = yellow_total = white_total =
+          bot_total = duck_total = 0;
+
+      for (int i = 0; i < convert_to_HSV_up.rows; i++) {
+        for (int j = 0; j < convert_to_HSV_up.cols; j++) {
+          bot_total += float(bot_detection.at<uchar>(i, j)) / 255;
         }
+      }
+      for (int i = 0; i < cropped_image.rows; i++) {
+        for (int j = 0; j < cropped_image.cols; j++) {
+          duck_total += float(duck_detection.at<uchar>(i, j)) / 255;
 
-        if (((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
-              float(cropped_image.cols)) < 255 * HIGHER) &&
-            ((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
-              float(cropped_image.cols)) > 255 * LOWER)) {
-          if (DEBUG)
-            cropped_image.at<cv::Vec3b>(i, j)[1] =
-                yellow_lane_detection.at<uchar>(i, j);
-          yellow_total += float(yellow_lane_detection.at<uchar>(i, j));
-          yellow_centroid += float(yellow_lane_detection.at<uchar>(i, j)) *
-                             float(j) / float(cropped_image.cols);
+          if (DEBUG) {
+            cropped_image.at<cv::Vec3b>(i, j)[0] =
+                duck_detection.at<uchar>(i, j);
+          }
+          float LOWER = 0.0;
+          float HIGHER = 1.0;
+
+          if (LaneControl::CURRENT_STATE == LEFT_TURN_STATE) {
+            HIGHER = HIGHER_LEFT;
+            LOWER = LOWER_LEFT;
+          } else if (LaneControl::CURRENT_STATE == RIGHT_TURN_STATE) {
+            HIGHER = HIGHER_RIGHT;
+            LOWER = LOWER_RIGHT;
+          } else if (LaneControl::CURRENT_STATE == GO_STRAIGH_STATE) {
+            HIGHER = HIGHER_STRAIGHT;
+            LOWER = LOWER_STRAIGHT;
+          } else if (LaneControl::CURRENT_STATE == NORMAL_NAVIGATION_STATE) {
+            HIGHER = HIGHER_NORMAL;
+            LOWER = LOWER_NORMAL;
+          } else if (LaneControl::CURRENT_STATE == BOT_AVOIDANCE_STATE) {
+            HIGHER = HIGHER_BOT_DETECTION;
+            LOWER = LOWER_BOT_DETECTION;
+          }
+
+          if (((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
+                float(cropped_image.cols)) < 255 * HIGHER) &&
+              ((float(yellow_lane_detection.at<uchar>(i, j)) * float(j) /
+                float(cropped_image.cols)) > 255 * LOWER)) {
+            if (DEBUG)
+              cropped_image.at<cv::Vec3b>(i, j)[1] =
+                  yellow_lane_detection.at<uchar>(i, j);
+            yellow_total += float(yellow_lane_detection.at<uchar>(i, j));
+            yellow_centroid += float(yellow_lane_detection.at<uchar>(i, j)) *
+                               float(j) / float(cropped_image.cols);
+          }
+          float(j) / float(cropped_image.cols);
         }
-        float(j) / float(cropped_image.cols);
       }
-    }
-    if (duck_total > 0) {
-      duck_total /= cropped_image.rows * cropped_image.cols;
-      if (duck_total > 0.009) {
-        change_state(STOP_STATE);
+      if (duck_total > 0) {
+        duck_total /= cropped_image.rows * cropped_image.cols;
+        if (duck_total > 0.009) {
+          change_state(STOP_STATE);
+        }
       }
-    }
-    if (bot_total > 0) {
-      bot_total /= convert_to_HSV_up.rows * convert_to_HSV_up.cols;
-      if (bot_total > 0.04 && CURRENT_STATE != BOT_AVOIDANCE_STATE) {
-        change_state(BOT_AVOIDANCE_STATE);
+      if (bot_total > 0) {
+        bot_total /= convert_to_HSV_up.rows * convert_to_HSV_up.cols;
+        if (bot_total > 0.04 && CURRENT_STATE != BOT_AVOIDANCE_STATE) {
+          change_state(BOT_AVOIDANCE_STATE);
+        }
       }
-    }
 
-    if (yellow_total > 0)
-      yellow_centroid /= yellow_total;
-
-    old_centroid = yellow_centroid;
+      if (yellow_total > 0)
+        yellow_centroid /= yellow_total;
+    }
     if (DEBUG) {
       sensor_msgs::ImagePtr msg2 =
           cv_bridge::CvImage(std_msgs::Header(), "bgr8", cropped_image)
@@ -298,15 +326,36 @@ public:
       LaneControl::pub.publish(msg2);
     }
     auto t = (ros::Time::now() - state_change_time).toSec();
-    if (LaneControl::CURRENT_STATE != STOP_STATE &&
-        !((t < 1.0) && (CURRENT_STATE == BOT_AVOIDANCE_STATE ||
-                        CURRENT_STATE == LEFT_TURN_STATE ||
-                        CURRENT_STATE == RIGHT_TURN_STATE ||
-                        CURRENT_STATE == GO_STRAIGH_STATE))) {
-
-      bool right = false;
-      bool straight = false;
-      bool left = false;
+    bool right = false;
+    bool straight = false;
+    bool left = false;
+    if (LaneControl::CURRENT_STATE == GO_STRAIGH_STATE) {
+      if (yellow_centroid < 0.14)
+        left = true;
+      else if (yellow_centroid > 0.20)
+        right = true;
+      else
+        straight = true;
+      if (right) {
+        control_msg.vel_right = 0.15;
+        control_msg.vel_left = 0.4;
+      } else if (left) {
+        control_msg.vel_right = 0.4;
+        control_msg.vel_left = 0.15;
+      } else {
+        control_msg.vel_right = 0.4;
+        control_msg.vel_left = 0.4;
+      }
+      LaneControl::lane_control_pub.publish(control_msg);
+    } else if (LaneControl::CURRENT_STATE != STOP_STATE &&
+               LaneControl::CURRENT_STATE != PARKING_STATE &&
+               LaneControl::CURRENT_STATE != PARKING_LOT_ENTRANCE_STATE &&
+               LaneControl::CURRENT_STATE != ROTATE_STATE &&
+               LaneControl::CURRENT_STATE != ROTATE_RIGHT_STATE &&
+               !((t < 1.0) && (CURRENT_STATE == BOT_AVOIDANCE_STATE ||
+                               CURRENT_STATE == LEFT_TURN_STATE ||
+                               CURRENT_STATE == RIGHT_TURN_STATE ||
+                               CURRENT_STATE == GO_STRAIGH_STATE))) {
 
       if (LaneControl::CURRENT_STATE == BOT_AVOIDANCE_STATE) {
         if (yellow_centroid < 0.86)
