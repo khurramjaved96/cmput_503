@@ -384,6 +384,44 @@ public:
         control_msg.vel_left = 0.3;
       }
       LaneControl::lane_control_pub.publish(control_msg);
+    } else if (LaneControl::CURRENT_STATE == PARKING_STATE ||
+               LaneControl::CURRENT_STATE == PARKING_LOT_ENTRANCE_STATE) {
+
+      if (x_avg > 0 && x_avg < 210) {
+        left = true;
+      } else if (x_avg > 0 && x_avg > 230) {
+        right = true;
+      } else if (x_avg > 0) {
+        straight = true;
+      }
+      if (right) {
+        control_msg.vel_right = 0.05;
+        control_msg.vel_left = 0.6;
+        LaneControl::lane_control_pub.publish(control_msg);
+      } else if (left) {
+        control_msg.vel_right = 0.6;
+        control_msg.vel_left = 0.05;
+        LaneControl::lane_control_pub.publish(control_msg);
+      } else if (straight) {
+        control_msg.vel_right = 0.3;
+        control_msg.vel_left = 0.3;
+        LaneControl::lane_control_pub.publish(control_msg);
+      }
+    } else if (LaneControl::CURRENT_STATE == ROTATE_STATE) {
+      if (global_t % 2 == 0)
+        control_msg.vel_right = 0.7;
+      else
+        control_msg.vel_right = 0.0;
+      control_msg.vel_left = 0.0;
+      LaneControl::lane_control_pub.publish(control_msg);
+    }
+    else if (LaneControl::CURRENT_STATE == ROTATE_RIGHT_STATE) {
+      if (global_t % 2 == 0)
+        control_msg.vel_left = 0.7;
+      else
+        control_msg.vel_left = 0.0;
+      control_msg.vel_right = 0.0;
+      LaneControl::lane_control_pub.publish(control_msg);
     }
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
