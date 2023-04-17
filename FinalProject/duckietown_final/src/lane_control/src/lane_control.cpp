@@ -41,10 +41,9 @@ int PARK_FAR_LEFT = 207;
 int PARK_FAR_RIGHT = 228;
 int PARK_CLOSE_LEFT = 226;
 int PARK_CLOSE_RIGHT = 75;
-int TARGET_PARK = PARK_CLOSE_RIGHT;
+int TARGET_PARK = PARK_FAR_LEFT;
 int STOP_BEFORE_PARKING_TAG = 38;
 int PARKING_ENTRANCE_TAG = 227;
-
 
 int STOP_STATE = -100;
 int BOT_AVOIDANCE_STATE = -200;
@@ -355,20 +354,20 @@ public:
     bool right = false;
     bool straight = false;
     bool left = false;
-//    std::cout << "T diff = " <<(ros::Time::now() - last_red_line_time).toSec() << std::endl;
+    //    std::cout << "T diff = " <<(ros::Time::now() -
+    //    last_red_line_time).toSec() << std::endl;
     if ((ros::Time::now() - last_red_line_time).toSec() < 0.5) {
 
     } else {
       if (LaneControl::CURRENT_STATE == GO_STRAIGH_STATE) {
-        if((ros::Time::now() - state_change_time).toSec() > 1.5) {
+        if ((ros::Time::now() - state_change_time).toSec() > 1.5) {
           if (yellow_centroid < 0.20)
             left = true;
           else if (yellow_centroid > 0.30)
             right = true;
           else
             straight = true;
-        }
-        else{
+        } else {
           if (yellow_centroid < 0.14)
             left = true;
           else if (yellow_centroid > 0.20)
@@ -462,7 +461,7 @@ public:
     auto duration = duration_cast<milliseconds>(stop - start);
   }
   static void change_state(int state) {
-//    if(CURRENT_STATE == BOT_AVOIDANCE_STATE)
+    //    if(CURRENT_STATE == BOT_AVOIDANCE_STATE)
     std::cout << "Changing state to " << state << std::endl;
     LaneControl::CURRENT_STATE = state;
     state_change_time = ros::Time::now();
