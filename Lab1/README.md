@@ -1,2 +1,1 @@
-# cmput_503
-Code used for doing exercises for CMPUT503
+# Exercise 1 Duckiebot Assembly and Basic Development
